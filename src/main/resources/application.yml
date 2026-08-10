@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: breath-care
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+server:
+  port: 8080
+
+jwt:
+  # 운영에서는 반드시 환경변수로 주입한다. (HS256 기준 최소 32바이트)
+  secret: ${JWT_SECRET}
+  access-token-validity-ms: 3600000
+
+logging:
+  level:
+    org.exaple.breath_care: DEBUG

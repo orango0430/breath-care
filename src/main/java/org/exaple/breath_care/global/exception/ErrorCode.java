@@ -1,0 +1,39 @@
+package org.exaple.breath_care.global.exception;
+
+import org.springframework.http.HttpStatus;
+
+/**
+ * API 전역에서 쓰는 에러 코드.
+ * 앱(프론트)은 HTTP 상태가 아니라 이 code 값으로 분기한다.
+ */
+public enum ErrorCode {
+
+    INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
+    /** 이메일이 없든 비밀번호가 틀리든 같은 코드를 쓴다. 어느 쪽인지 알려주면 가입 여부가 새어 나간다. */
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "대상을 찾을 수 없습니다."),
+    DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
+
+    /** 품질 게이트: 손 흔들림·조명 문제 등으로 신호를 신뢰할 수 없을 때. 계산하지 않고 재측정을 요구한다. */
+    POOR_SIGNAL_QUALITY(HttpStatus.UNPROCESSABLE_CONTENT, "신호 품질이 낮습니다. 다시 측정해 주세요."),
+
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");
+
+    private final HttpStatus status;
+    private final String defaultMessage;
+
+    ErrorCode(HttpStatus status, String defaultMessage) {
+        this.status = status;
+        this.defaultMessage = defaultMessage;
+    }
+
+    public HttpStatus getStatus() {
+        return status;
+    }
+
+    public String getDefaultMessage() {
+        return defaultMessage;
+    }
+}

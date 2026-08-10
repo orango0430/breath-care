@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    # docker-compose의 MySQL. 호스트 기본 MySQL(3306)과 겹치지 않게 3307을 쓴다.
+    url: jdbc:mysql://localhost:3307/breathcare?characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    username: breathcare
+    password: ${DB_PASSWORD:breathcare}
+  jpa:
+    show-sql: true
+
+jwt:
+  secret: ${JWT_SECRET:local-only-development-secret-do-not-use-in-prod}
