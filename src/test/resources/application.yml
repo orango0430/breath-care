@@ -1,0 +1,19 @@
+# 테스트는 MySQL 없이 돌아야 한다 (CI·팀원 로컬 모두).
+# 스키마가 중요해지면 Testcontainers로 실제 MySQL을 띄우는 쪽으로 바꾼다.
+spring:
+  datasource:
+    url: jdbc:h2:mem:breathcare;MODE=MySQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+
+# 이 파일은 클래스패스에서 main의 application.yml을 가린다(shadow).
+# 따라서 테스트에 필요한 값은 여기에 모두 적어야 한다.
+jwt:
+  secret: test-only-secret-key-not-used-anywhere-else
+  access-token-validity-ms: 3600000
