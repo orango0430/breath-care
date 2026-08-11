@@ -38,3 +38,15 @@ out/
 
 ### .env ###
 .env
+
+### JVM 크래시 덤프 ###
+hs_err_pid*.log
+replay_pid*.log
+
+### Firebase 서비스 계정 키 (절대 커밋 금지) ###
+firebase-service-account.json
+**/firebase-service-account*.json
+*-firebase-adminsdk-*.json
+**/*-firebase-adminsdk-*.json
+google-services.json
+

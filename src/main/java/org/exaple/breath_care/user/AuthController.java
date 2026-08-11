@@ -7,6 +7,7 @@ import org.exaple.breath_care.global.response.ApiResponse;
 import org.exaple.breath_care.global.security.JwtAuthenticationFilter;
 import org.exaple.breath_care.user.dto.LoginRequest;
 import org.exaple.breath_care.user.dto.LoginResponse;
+import org.exaple.breath_care.user.dto.LogoutRequest;
 import org.exaple.breath_care.user.dto.SignupRequest;
 import org.exaple.breath_care.user.dto.UserResponse;
 import org.springframework.http.HttpStatus;
@@ -37,10 +38,17 @@ public class AuthController {
         return ApiResponse.ok(authService.login(request));
     }
 
+    /**
+     * 본문은 선택이다. fcmToken을 보내면 그 기기의 알림 등록까지 해제한다.
+     * (기존 계약을 깨지 않도록 본문 없이 호출해도 그대로 동작한다)
+     */
     @PostMapping("/logout")
     public ApiResponse<Void> logout(
-            @RequestAttribute(JwtAuthenticationFilter.CLAIMS_ATTRIBUTE) Claims claims) {
-        authService.logout(claims);
+            @AuthenticationPrincipal Long userId,
+            @RequestAttribute(JwtAuthenticationFilter.CLAIMS_ATTRIBUTE) Claims claims,
+            @RequestBody(required = false) LogoutRequest request) {
+
+        authService.logout(userId, claims, request == null ? null : request.fcmToken());
         return ApiResponse.ok(null);
     }
 
