@@ -5,3 +5,8 @@ spring:
     password: ${DB_PASSWORD}
   jpa:
     show-sql: false
+
+firebase:
+  enabled: true
+  # 배포 환경에서는 키 파일을 이미지에 넣지 말고 시크릿으로 마운트한 경로를 넣는다.
+  credentials-location: ${FIREBASE_CREDENTIALS}

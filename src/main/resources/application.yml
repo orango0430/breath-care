@@ -22,6 +22,12 @@ jwt:
   secret: ${JWT_SECRET}
   access-token-validity-ms: 3600000
 
+firebase:
+  # 서비스 계정 키가 없는 팀원도 앱을 띄울 수 있도록 기본값은 꺼짐.
+  # 켜면 LoggingPushSender 대신 FcmPushSender가 등록된다.
+  enabled: ${FIREBASE_ENABLED:false}
+  credentials-location: ${FIREBASE_CREDENTIALS:file:./firebase-service-account.json}
+
 logging:
   level:
     org.exaple.breath_care: DEBUG

@@ -42,6 +42,16 @@ public class DeviceService {
         userDeviceRepository.deleteAllByUserId(userId);
     }
 
+    /**
+     * FCM이 "더는 유효하지 않은 토큰"이라고 알려준 경우 제거한다(앱 삭제, 토큰 만료 등).
+     * 소유자를 따지지 않는다. 토큰 자체가 죽었으므로 누구 것이든 남겨둘 이유가 없다.
+     */
+    @Transactional
+    public void removeDeadToken(String fcmToken) {
+        userDeviceRepository.findByFcmToken(fcmToken)
+                .ifPresent(userDeviceRepository::delete);
+    }
+
     /** 발송 대상 토큰. FCM 연동 시 여기서 받은 토큰으로 보낸다. */
     @Transactional(readOnly = true)
     public List<String> tokensOf(Long userId) {

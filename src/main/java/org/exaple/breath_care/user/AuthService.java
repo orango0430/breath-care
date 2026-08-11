@@ -3,6 +3,7 @@ package org.exaple.breath_care.user;
 import io.jsonwebtoken.Claims;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.exaple.breath_care.device.DeviceService;
 import org.exaple.breath_care.global.exception.BusinessException;
 import org.exaple.breath_care.global.exception.ErrorCode;
 import org.exaple.breath_care.global.security.JwtTokenProvider;
@@ -27,6 +28,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final TokenRevocationService revocationService;
+    private final DeviceService deviceService;
 
     /**
      * 존재하지 않는 이메일일 때 비교 대상으로 쓰는 더미 해시.
@@ -72,9 +74,15 @@ public class AuthService {
         return LoginResponse.of(issued.value(), expiresInSec, UserResponse.from(user));
     }
 
-    /** 토큰을 무효 목록에 올린다. 앱도 저장된 토큰을 지워야 한다. */
-    public void logout(Claims claims) {
+    /**
+     * 토큰을 무효 목록에 올리고, 이 기기로 더는 알림이 가지 않게 한다.
+     * fcmToken을 같이 보내지 않으면 기기 등록이 남아, 같은 폰에 다른 계정이 로그인해도
+     * 이전 사용자의 알림이 계속 도착한다. 앱은 로그아웃 시 반드시 함께 보내야 한다.
+     */
+    @Transactional
+    public void logout(Long userId, Claims claims, String fcmToken) {
         revocationService.revoke(claims.getId(), claims.getExpiration().toInstant());
+        deviceService.unregister(userId, fcmToken);
     }
 
     @Transactional
@@ -84,5 +92,6 @@ public class AuthService {
 
         user.withdraw();
         revocationService.revoke(claims.getId(), claims.getExpiration().toInstant());
+        deviceService.unregisterAll(userId);
     }
 }
