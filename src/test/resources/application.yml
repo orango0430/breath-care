@@ -12,6 +12,11 @@ spring:
   flyway:
     enabled: false
 
+# 스케줄러는 테스트에서 끄고, 서비스를 직접 호출해 시각을 고정한 채 검증한다.
+push:
+  scheduler:
+    enabled: false
+
 # 이 파일은 클래스패스에서 main의 application.yml을 가린다(shadow).
 # 따라서 테스트에 필요한 값은 여기에 모두 적어야 한다.
 jwt:
