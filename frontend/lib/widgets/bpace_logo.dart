@@ -5,17 +5,38 @@ import '../theme/app_colors.dart';
 class BpaceLogo extends StatelessWidget {
   final double iconSize;
   final double fontSize;
+  final double? height;
   final Color color;
+  final bool useFullImage;
 
   const BpaceLogo({
     super.key,
     this.iconSize = 36.0,
     this.fontSize = 26.0,
+    this.height,
     this.color = AppColors.white,
+    this.useFullImage = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (useFullImage) {
+      final logoHeight = height ?? (fontSize * 1.6);
+      return Image.asset(
+        'assets/images/bpace_logo_transparent.png',
+        height: logoHeight,
+        fit: BoxFit.contain,
+        color: color == AppColors.white ? null : color,
+        colorBlendMode: color == AppColors.white ? null : BlendMode.srcIn,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildTextAndIconLogo();
+        },
+      );
+    }
+    return _buildTextAndIconLogo();
+  }
+
+  Widget _buildTextAndIconLogo() {
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,

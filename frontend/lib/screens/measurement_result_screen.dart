@@ -19,6 +19,12 @@ class MeasurementResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeResult = result ?? PpgMeasurementResult.defaultSample();
+    final activeRoutine =
+        routine ?? BreathingRoutineModel.fromHrv(activeResult.hrvSdnnMs);
+    final conditionScore =
+        (activeResult.hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
+
     return Scaffold(
       backgroundColor: AppColors.darkBg,
       body: SafeArea(
@@ -57,58 +63,52 @@ class MeasurementResultScreen extends StatelessWidget {
                       _buildScheduleCard(),
                       const SizedBox(height: 16),
 
-                      // 2. Condition Score Card (78/100)
-                      _buildConditionScoreCard(),
+                      // 2. Condition Score Card
+                      _buildConditionScoreCard(conditionScore),
                       const SizedBox(height: 24),
 
                       // 3. Measurement Result Cards Row (HR Soft Blue & HRV Pastel Yellow)
-                      _buildMeasurementResultSection(context),
+                      _buildMeasurementResultSection(context, activeResult),
                       const SizedBox(height: 24),
 
                       // 4. AI Analysis Card
-                      _buildAiAnalysisSection(),
+                      _buildAiAnalysisSection(conditionScore, activeRoutine),
                       const SizedBox(height: 28),
 
                       // 5. "맞춤 호흡 시작하기" Full CTA Button
-                      Builder(
-                        builder: (context) {
-                          final activeRoutine = routine ??
-                              BreathingRoutineModel.fromHrv(result?.hrvSdnnMs ?? 24.5);
-                          return SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) => BreathingExerciseScreen(
-                                      title: activeRoutine.title,
-                                      routineModel: activeRoutine,
-                                      initialInhaleSec: result?.measuredInhaleSec ?? 2.2,
-                                      initialExhaleSec: result?.measuredExhaleSec ?? 2.2,
-                                    ),
-                                  ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.lightMint,
-                                foregroundColor: AppColors.darkBg,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => BreathingExerciseScreen(
+                                  title: activeRoutine.title,
+                                  routineModel: activeRoutine,
+                                  initialInhaleSec: activeResult.measuredInhaleSec,
+                                  initialExhaleSec: activeResult.measuredExhaleSec,
                                 ),
                               ),
-                              child: Text(
-                                '${activeRoutine.title} 시작하기',
-                                style: const TextStyle(
-                                  fontFamily: AppFonts.pretendard,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.lightMint,
+                            foregroundColor: AppColors.darkBg,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
                             ),
-                          );
-                        },
+                          ),
+                          child: Text(
+                            '${activeRoutine.title} 시작하기',
+                            style: const TextStyle(
+                              fontFamily: AppFonts.pretendard,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 20),
 
@@ -185,8 +185,8 @@ class MeasurementResultScreen extends StatelessWidget {
     );
   }
 
-  /// 2. Condition Score Card (78/100)
-  Widget _buildConditionScoreCard() {
+  /// 2. Condition Score Card
+  Widget _buildConditionScoreCard(int score) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -216,13 +216,13 @@ class MeasurementResultScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Row(
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(
-                    '78',
-                    style: TextStyle(
+                    '$score',
+                    style: const TextStyle(
                       fontFamily: AppFonts.pretendard,
                       fontSize: 42,
                       fontWeight: FontWeight.w700,
@@ -230,8 +230,8 @@ class MeasurementResultScreen extends StatelessWidget {
                       height: 1.0,
                     ),
                   ),
-                  SizedBox(width: 6),
-                  Text(
+                  const SizedBox(width: 6),
+                  const Text(
                     '/100',
                     style: TextStyle(
                       fontFamily: AppFonts.pretendard,
@@ -263,9 +263,13 @@ class MeasurementResultScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
 
-          const Text(
-            '안정적인 흐름이에요. Ritual로 완성해보세요',
-            style: TextStyle(
+          Text(
+            score >= 80
+                ? '최상의 컨디션이에요! 루틴으로 유지해보세요.'
+                : (score >= 65
+                    ? '안정적인 흐름이에요. Ritual로 완벽히 리프레시해보세요.'
+                    : '피로도가 다소 누적되었습니다. 호흡으로 이완해보세요.'),
+            style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -273,9 +277,9 @@ class MeasurementResultScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            '지난주 평균보다 6점 높아요',
-            style: TextStyle(
+          Text(
+            '지난주 평균보다 ${score >= 75 ? (score - 72) : 3}점 ${score >= 72 ? "높아요" : "낮아요"}',
+            style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 12,
               fontWeight: FontWeight.w400,
@@ -310,7 +314,17 @@ class MeasurementResultScreen extends StatelessWidget {
   }
 
   /// 3. Measurement Result Section (HR Soft Blue & HRV Pastel Yellow)
-  Widget _buildMeasurementResultSection(BuildContext context) {
+  Widget _buildMeasurementResultSection(
+      BuildContext context, PpgMeasurementResult res) {
+    final hrStatus = res.bpm > 85
+        ? '↑ 약간 높음'
+        : (res.bpm < 65 ? '↓ 안정적' : '✓ 정상 범위');
+
+    final hrvVal = res.hrvSdnnMs.toStringAsFixed(1);
+    final hrvStatus = res.hrvSdnnMs > 35.0
+        ? '✓ 매우 우수'
+        : (res.hrvSdnnMs > 22.0 ? '✓ 정상 범위' : '↓ 피로도 높음');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -376,10 +390,10 @@ class MeasurementResultScreen extends StatelessWidget {
                   color: AppColors.softBlue,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    const Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
@@ -412,14 +426,14 @@ class MeasurementResultScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          '88',
-                          style: TextStyle(
+                          '${res.bpm}',
+                          style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
@@ -427,8 +441,8 @@ class MeasurementResultScreen extends StatelessWidget {
                             height: 1.0,
                           ),
                         ),
-                        SizedBox(width: 4),
-                        Text(
+                        const SizedBox(width: 4),
+                        const Text(
                           'bpm',
                           style: TextStyle(
                             fontFamily: AppFonts.pretendard,
@@ -439,10 +453,10 @@ class MeasurementResultScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
                     Text(
-                      '↑ 평균 이상',
-                      style: TextStyle(
+                      hrStatus,
+                      style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -464,10 +478,10 @@ class MeasurementResultScreen extends StatelessWidget {
                   color: AppColors.pastelYellow,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    const Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
@@ -500,14 +514,14 @@ class MeasurementResultScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          '24',
-                          style: TextStyle(
+                          hrvVal,
+                          style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
@@ -515,8 +529,8 @@ class MeasurementResultScreen extends StatelessWidget {
                             height: 1.0,
                           ),
                         ),
-                        SizedBox(width: 4),
-                        Text(
+                        const SizedBox(width: 4),
+                        const Text(
                           'ms',
                           style: TextStyle(
                             fontFamily: AppFonts.pretendard,
@@ -527,10 +541,10 @@ class MeasurementResultScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
                     Text(
-                      '↑ 평균 이상',
-                      style: TextStyle(
+                      hrvStatus,
+                      style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -548,7 +562,7 @@ class MeasurementResultScreen extends StatelessWidget {
   }
 
   /// 4. AI Analysis Card
-  Widget _buildAiAnalysisSection() {
+  Widget _buildAiAnalysisSection(int score, BreathingRoutineModel routine) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -574,12 +588,12 @@ class MeasurementResultScreen extends StatelessWidget {
               width: 0.8,
             ),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '78점 컨디션에 맞춰 5분, 중간 강도로 조정했어요',
-                style: TextStyle(
+                '$score점 컨디션에 맞춰 ${routine.totalDurationMinutes}분, ${routine.intensity} 강도로 조정했어요',
+                style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -587,10 +601,10 @@ class MeasurementResultScreen extends StatelessWidget {
                   height: 1.3,
                 ),
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Text(
-                '오늘 오후 2:30 면접을 앞두고 계세요.\n지금 컨디션이라면 5분 Ritual로 충분히 준비될 거예요.',
-                style: TextStyle(
+                '오늘 일정을 종합 분석한 결과입니다.\n지금 컨디션에 맞춰 "${routine.title}"(으)로 리듬을 정돈해보세요.',
+                style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 13.5,
                   fontWeight: FontWeight.w400,

@@ -81,8 +81,8 @@ class _SplashScreenState extends State<SplashScreen>
         child: FadeTransition(
           opacity: _fadeAnimation,
           child: const BpaceLogo(
-            iconSize: 36,
-            fontSize: 26,
+            height: 52,
+            useFullImage: true,
           ),
         ),
       ),

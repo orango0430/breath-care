@@ -21,8 +21,8 @@ class ConditionMeasurementScreen extends StatefulWidget {
 class _ConditionMeasurementScreenState
     extends State<ConditionMeasurementScreen>
     with SingleTickerProviderStateMixin {
-  // Whether to display the preparation guide modal overlay (Default true on entry)
-  bool _showGuideSheet = true;
+  // Whether to display the preparation guide modal overlay (Default false on entry)
+  bool _showGuideSheet = false;
 
   // PageController for guide modal slides (0..2)
   final PageController _guidePageController = PageController();
@@ -48,7 +48,7 @@ class _ConditionMeasurementScreenState
     super.initState();
     _waveAnimationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 5),
+      duration: const Duration(seconds: 8),
     )..repeat();
   }
 
@@ -124,6 +124,7 @@ class _ConditionMeasurementScreenState
         if (_secondsLeft > 1) {
           _secondsLeft--;
           _progress = (20 - _secondsLeft) / 20.0;
+          _lastResult = _ppgService.computeResults();
         } else {
           _secondsLeft = 0;
           _progress = 1.0;
@@ -138,6 +139,7 @@ class _ConditionMeasurementScreenState
     _lastResult = _ppgService.computeResults();
     _recommendedRoutine =
         BreathingRoutineModel.fromHrv(_lastResult!.hrvSdnnMs);
+    _ppgService.stopCamera(); // Turn off LED flash torch automatically after 20s!
 
     setState(() {
       _status = MeasurementStatus.completed;
@@ -441,7 +443,7 @@ class _ConditionMeasurementScreenState
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      showData ? '86' : '--',
+                      showData ? '${_lastResult?.bpm ?? 76}' : '--',
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 22,
@@ -538,6 +540,7 @@ class _ConditionMeasurementScreenState
     return Container(
       width: double.infinity,
       height: 180,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.darkCharcoal,
         borderRadius: BorderRadius.circular(20),
@@ -636,113 +639,127 @@ class _ConditionMeasurementScreenState
   /// 6. Preparation Guide Sheet Overlay (컨디션 측정_측정 전)
   Widget _buildPreparationGuideOverlay() {
     return Positioned.fill(
-      child: Container(
-        color: Colors.black.withAlpha(160),
-        alignment: Alignment.bottomCenter,
+      child: GestureDetector(
+        onTap: _closeGuideSheet,
         child: Container(
-          width: double.infinity,
-          height: 380,
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          decoration: BoxDecoration(
-            color: AppColors.darkCharcoal,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(
-              color: AppColors.slateDarkGray.withAlpha(80),
-              width: 1,
-            ),
-          ),
-          child: Column(
-            children: [
-              // Header Title: "준비 방법"
-              const Text(
-                '준비 방법',
-                style: TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.white,
+          color: Colors.black.withAlpha(170),
+          alignment: Alignment.bottomCenter,
+          child: GestureDetector(
+            onTap: () {}, // Prevent tap through
+            child: Container(
+              width: double.infinity,
+              height: 500,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+              decoration: BoxDecoration(
+                color: AppColors.darkCharcoal,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: AppColors.slateDarkGray.withAlpha(80),
+                  width: 1,
                 ),
-              ),
-              const SizedBox(height: 24),
-
-              // PageView Slides (3 Guide Slides)
-              Expanded(
-                child: PageView(
-                  controller: _guidePageController,
-                  onPageChanged: (index) {
-                    setState(() {
-                      _currentGuidePage = index;
-                    });
-                  },
-                  children: [
-                    // Slide 1
-                    _buildGuideSlide(
-                      title: '손끝으로 카메라와\n플래시를 완전히 덮어주세요',
-                      subtitle: '검지 또는 중지 손가락 끝으로\n렌즈 전체를 부드럽게 덮어주세요.',
-                    ),
-                    // Slide 2
-                    _buildGuideSlide(
-                      title: '플래시가 자동으로 켜집니다',
-                      subtitle: '붉은 빛이 손가락 속 혈류에\n반사되는 정도를 감지해요.',
-                    ),
-                    // Slide 3
-                    _buildGuideSlide(
-                      title: '20초 동안 손가락을 고정하세요',
-                      subtitle: '손가락이 이탈하거나 흔들리면\n측정이 중단될 수 있어요.',
-                    ),
-                  ],
-                ),
-              ),
-
-              // Footer: Page Dots Indicator & "건너뛰기 >" Button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const SizedBox(width: 60), // balance left
-
-                  // 3 Interactive Dot Indicators
-                  Row(
-                    children: List.generate(3, (index) {
-                      final isSelected = _currentGuidePage == index;
-                      return GestureDetector(
-                        onTap: () {
-                          _guidePageController.animateToPage(
-                            index,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4.0, vertical: 8.0),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: isSelected ? 9 : 7,
-                            height: isSelected ? 9 : 7,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.white
-                                  : AppColors.slateGray.withAlpha(150),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0xB3000000), // Rich dark drop shadow
+                    blurRadius: 36,
+                    spreadRadius: 4,
+                    offset: Offset(0, -6),
                   ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Header Title: "준비 방법"
+                  const Text(
+                    '준비 방법',
+                    style: TextStyle(
+                      fontFamily: AppFonts.pretendard,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
-                  // "건너뛰기 >" Button
-                  InkWell(
-                    onTap: _closeGuideSheet,
-                    borderRadius: BorderRadius.circular(8),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                          vertical: 4.0, horizontal: 8.0),
-                      child: Row(
-                        children: [
-                          Text(
+                  // PageView Slides (3 Guide Slides)
+                  Expanded(
+                    child: PageView(
+                      controller: _guidePageController,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentGuidePage = index;
+                        });
+                      },
+                      children: [
+                        // Slide 1
+                        _buildGuideSlide(
+                          imagePath: 'assets/images/guide_1.png',
+                          title: '손끝으로 카메라와\n플래시를 완전히 덮어주세요',
+                          subtitle: '검지 또는 중지 손가락 끝으로\n렌즈 전체를 부드럽게 덮어주세요.',
+                        ),
+                        // Slide 2
+                        _buildGuideSlide(
+                          imagePath: 'assets/images/guide_2.png',
+                          title: '플래시가\n자동으로 켜집니다',
+                          subtitle: '밝은 빛이 손가락 속 혈류에\n반사되는 정도를 감지해요.',
+                        ),
+                        // Slide 3
+                        _buildGuideSlide(
+                          imagePath: 'assets/images/guide_3.png',
+                          title: '20초 동안 손가락을\n고정하세요',
+                          subtitle: '손가락이 이탈하거나 흔들리면\n측정에 중단될 수 있어요.',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Footer: Page Dots Indicator & "건너뛰기" Button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const SizedBox(width: 60), // balance left
+
+                      // 3 Interactive Dot Indicators
+                      Row(
+                        children: List.generate(3, (index) {
+                          final isSelected = _currentGuidePage == index;
+                          return GestureDetector(
+                            onTap: () {
+                              _guidePageController.animateToPage(
+                                index,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                            behavior: HitTestBehavior.opaque,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4.0, vertical: 4.0),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: isSelected ? 8 : 6,
+                                height: isSelected ? 8 : 6,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppColors.white
+                                      : AppColors.white.withAlpha(90),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+
+                      // "건너뛰기" Button
+                      InkWell(
+                        onTap: _closeGuideSheet,
+                        borderRadius: BorderRadius.circular(8),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                              vertical: 4.0, horizontal: 8.0),
+                          child: Text(
                             '건너뛰기',
                             style: TextStyle(
                               fontFamily: AppFonts.pretendard,
@@ -751,19 +768,13 @@ class _ConditionMeasurementScreenState
                               color: AppColors.lightGray,
                             ),
                           ),
-                          SizedBox(width: 2),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: AppColors.lightGray,
-                            size: 16,
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -771,36 +782,101 @@ class _ConditionMeasurementScreenState
   }
 
   Widget _buildGuideSlide({
+    required String imagePath,
     required String title,
     required String subtitle,
   }) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: AppColors.white,
-            height: 1.35,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: Stack(
+        children: [
+          // Background Guide Image (guide_1.png, guide_2.png, guide_3.png)
+          Positioned.fill(
+            child: Image.asset(
+              imagePath,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: const Color(0xFF2C2C2E),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.camera_alt_outlined,
+                    color: Colors.white.withAlpha(60),
+                    size: 64,
+                  ),
+                );
+              },
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: AppColors.slateGray,
-            height: 1.4,
+
+          // Dark Gradient Vignette Overlay for Text Contrast & Shadow Effect
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withAlpha(40),
+                    Colors.transparent,
+                    Colors.black.withAlpha(160),
+                    Colors.black.withAlpha(240),
+                  ],
+                  stops: const [0.0, 0.25, 0.65, 1.0],
+                ),
+              ),
+            ),
           ),
-        ),
-      ],
+
+          // Text Content overlay matching reference design Image 1
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: Column(
+              children: [
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.white,
+                    height: 1.3,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black,
+                        blurRadius: 10,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.lightGray.withAlpha(230),
+                    height: 1.4,
+                    shadows: const [
+                      Shadow(
+                        color: Colors.black,
+                        blurRadius: 8,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1060,7 +1136,7 @@ class _PpgWaveformPainter extends CustomPainter {
       ).createShader(Rect.fromLTWH(0, 0, w, h));
 
     final path = Path();
-    const cycleW = 280.0;
+    const cycleW = 330.0;
     // Subpixel continuous smooth leftward shift
     final shiftX = -animationValue * cycleW;
 

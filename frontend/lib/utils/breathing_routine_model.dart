@@ -40,6 +40,24 @@ class BreathingRoutineModel {
     required this.targetHold2,
   });
 
+  // 초당 총 호흡 1주기 시간 (초 단위)
+  double get cycleDurationSec => targetInhale + targetHold1 + targetExhale + targetHold2;
+
+  // 권장 루틴 수행 시간 (분 단위, 기본 5분)
+  int get totalDurationMinutes => 5;
+
+  // 루틴 강도 텍스트
+  String get intensity {
+    switch (type) {
+      case BreathingRoutineType.calm478:
+        return '높은 이완';
+      case BreathingRoutineType.box4444:
+        return '중간';
+      case BreathingRoutineType.resonance55:
+        return '기본';
+    }
+  }
+
   /// HRV 측정 결과(SDNNms) 기반 3대 호흡 루틴 자동 매핑
   factory BreathingRoutineModel.fromHrv(double hrvSdnn) {
     if (hrvSdnn < 30.0) {

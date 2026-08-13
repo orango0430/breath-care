@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
 import '../widgets/bpace_logo.dart';
 import 'home_screen.dart';
 import 'condition_measurement_screen.dart';
+import 'my_page_screen.dart';
 
 class LogScreen extends StatefulWidget {
   final int initialSubTab;
@@ -28,6 +30,7 @@ class _LogScreenState extends State<LogScreen> {
   // Dynamic Today & Selected Date
   final DateTime _today = DateTime.now();
   DateTime _selectedDate = DateTime.now();
+  DateTime _currentDisplayMonth = DateTime.now();
 
   // Month names for English header matching design ("August 2026")
   final List<String> _monthNames = const [
@@ -100,7 +103,7 @@ class _LogScreenState extends State<LogScreen> {
               // Main Scrollable Body
               SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.only(top: 12.0, bottom: 100.0),
+                padding: const EdgeInsets.only(top: 12.0, bottom: 90.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -109,15 +112,14 @@ class _LogScreenState extends State<LogScreen> {
                     const SizedBox(height: 24),
 
                     // Title
-                    const Text(
+                    Text(
                       'Time For\nYour Ritual',
-                      style: TextStyle(
-                        fontFamily: AppFonts.gmarketSans,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
+                      style: GoogleFonts.outfit(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w400,
                         color: AppColors.white,
-                        height: 1.2,
-                        letterSpacing: 0.5,
+                        height: 1.18,
+                        letterSpacing: 0.2,
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -179,21 +181,30 @@ class _LogScreenState extends State<LogScreen> {
             const SizedBox(width: 14),
 
             // Guest Pictogram Avatar
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: AppColors.slateDarkGray.withAlpha(150),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.slateDarkGray,
-                  width: 1,
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const MyPageScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.slateDarkGray.withAlpha(150),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.slateDarkGray,
+                    width: 1,
+                  ),
                 ),
-              ),
-              child: const Icon(
-                Icons.person_rounded,
-                color: AppColors.lightGray,
-                size: 22,
+                child: const Icon(
+                  Icons.person_rounded,
+                  color: AppColors.lightGray,
+                  size: 22,
+                ),
               ),
             ),
           ],
@@ -258,34 +269,52 @@ class _LogScreenState extends State<LogScreen> {
   }
 
   Widget _buildCalendarSection() {
-    final monthName = '${_monthNames[_today.month - 1]} ${_today.year}';
+    final monthName = '${_monthNames[_currentDisplayMonth.month - 1]} ${_currentDisplayMonth.year}';
     final weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.darkCharcoal,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: AppColors.slateDarkGray.withAlpha(60),
-          width: 1,
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isMonthlyView = !_isMonthlyView;
+        });
+      },
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.darkCharcoal,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: AppColors.slateDarkGray.withAlpha(60),
+            width: 1,
+          ),
         ),
-      ),
-      child: Column(
-        children: [
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _isMonthlyView = !_isMonthlyView;
-              });
-            },
-            behavior: HitTestBehavior.opaque,
-            child: Row(
+        child: Column(
+          children: [
+            // Calendar Month Navigation Row (< August 2026 >)
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SizedBox(width: 28),
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _currentDisplayMonth = DateTime(
+                        _currentDisplayMonth.year,
+                        _currentDisplayMonth.month - 1,
+                        1,
+                      );
+                    });
+                  },
+                  icon: const Icon(
+                    Icons.chevron_left_rounded,
+                    color: AppColors.lightGray,
+                    size: 24,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
                 Text(
                   monthName,
                   style: const TextStyle(
@@ -296,46 +325,58 @@ class _LogScreenState extends State<LogScreen> {
                     letterSpacing: 0.3,
                   ),
                 ),
-                Icon(
-                  _isMonthlyView
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                  color: AppColors.lightGray,
-                  size: 26,
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _currentDisplayMonth = DateTime(
+                        _currentDisplayMonth.year,
+                        _currentDisplayMonth.month + 1,
+                        1,
+                      );
+                    });
+                  },
+                  icon: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.lightGray,
+                    size: 24,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: weekDays.map((day) {
-              return SizedBox(
-                width: 32,
-                child: Text(
-                  day,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.slateGray,
+            // Weekday Headers: M T W T F S S
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: weekDays.map((day) {
+                return SizedBox(
+                  width: 36,
+                  child: Text(
+                    day,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: AppFonts.pretendard,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.slateGray,
+                    ),
                   ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 14),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 14),
 
-          if (!_isMonthlyView) _buildWeeklyCalendar() else _buildMonthlyCalendar(),
-        ],
+            if (!_isMonthlyView) _buildWeeklyCalendar() else _buildMonthlyCalendar(),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildWeeklyCalendar() {
-    final monday = _today.subtract(Duration(days: _today.weekday - 1));
+    final monday = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
     final weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
 
     return Row(
@@ -353,18 +394,18 @@ class _LogScreenState extends State<LogScreen> {
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: 38,
-            height: 52,
+            width: 36,
+            height: 36,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: isSelected ? AppColors.lightMint : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
+              shape: BoxShape.circle,
             ),
             child: Text(
               '${date.day}',
               style: TextStyle(
                 fontFamily: AppFonts.pretendard,
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
                 color: isSelected ? AppColors.darkBg : AppColors.white,
               ),
@@ -376,8 +417,8 @@ class _LogScreenState extends State<LogScreen> {
   }
 
   Widget _buildMonthlyCalendar() {
-    final firstDayOfMonth = DateTime(_today.year, _today.month, 1);
-    final daysInMonth = DateTime(_today.year, _today.month + 1, 0).day;
+    final firstDayOfMonth = DateTime(_currentDisplayMonth.year, _currentDisplayMonth.month, 1);
+    final daysInMonth = DateTime(_currentDisplayMonth.year, _currentDisplayMonth.month + 1, 0).day;
     final int offset = firstDayOfMonth.weekday - 1;
     final totalCells = offset + daysInMonth;
 
@@ -395,7 +436,7 @@ class _LogScreenState extends State<LogScreen> {
         if (index < offset) return const SizedBox.shrink();
 
         final dayNumber = index - offset + 1;
-        final date = DateTime(_today.year, _today.month, dayNumber);
+        final date = DateTime(_currentDisplayMonth.year, _currentDisplayMonth.month, dayNumber);
         final isSelected = date.year == _selectedDate.year &&
             date.month == _selectedDate.month &&
             date.day == _selectedDate.day;
@@ -597,33 +638,8 @@ class _LogScreenState extends State<LogScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildWeeklyAvgConditionCard(),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
         _buildTodayRecordSection(),
-        const SizedBox(height: 28),
-
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.lightMint,
-              foregroundColor: AppColors.darkBg,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
-              ),
-            ),
-            child: const Text(
-              'Ritual 시작하기',
-              style: TextStyle(
-                fontFamily: AppFonts.pretendard,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -773,20 +789,6 @@ class _LogScreenState extends State<LogScreen> {
           statusTagTextColor: const Color(0xFFD6E2F6),
           score: 81,
           isEvaluated: true,
-        ),
-        const SizedBox(height: 10),
-
-        _buildRecordCardItem(
-          title: '프로젝트 회의 일정',
-          time: '진행 전',
-          isEvaluated: false,
-        ),
-        const SizedBox(height: 10),
-
-        _buildRecordCardItem(
-          title: '중앙해커톤 본선 피칭',
-          time: '진행 전',
-          isEvaluated: false,
         ),
       ],
     );

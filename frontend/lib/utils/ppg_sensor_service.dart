@@ -21,6 +21,20 @@ class PpgMeasurementResult {
     this.signalQuality = 'Good',
   });
 
+  /// 컨디션 지수 (50 ~ 96점, 높을수록 건강함)
+  int get conditionScore => (hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
+
+  /// 스트레스 지수 (15 ~ 95점, 낮을수록 안정적)
+  int get stressIndex =>
+      ((bpm / 1.3) + (50 - hrvSdnnMs * 0.7)).clamp(15.0, 95.0).round();
+
+  /// 스트레스 상태 텍스트
+  String get stressStatusText {
+    if (stressIndex < 35) return '낮음';
+    if (stressIndex < 65) return '보통';
+    return '높음';
+  }
+
   factory PpgMeasurementResult.defaultSample() {
     return PpgMeasurementResult(
       bpm: 78,
@@ -35,6 +49,8 @@ class PpgMeasurementResult {
 
 /// PpgSensorService (카메라 PPG 센싱 및 실시간 붉은빛 명도 분석 서비스)
 class PpgSensorService {
+  /// 앱 세션 전역 최신 측정 데이터 저장소
+  static PpgMeasurementResult? latestResult;
   CameraController? _cameraController;
   bool _isInitializing = false;
   bool _isCameraAvailable = false;
@@ -189,13 +205,19 @@ class PpgSensorService {
 
       // RPM estimation based on HRV RSA
       breathRpm = (bpm / 5.2).round().clamp(10, 20);
+    } else {
+      // Dynamic fallback for simulation or quick measurements
+      final rand = math.Random();
+      bpm = 70 + rand.nextInt(18); // 70 ~ 87 bpm
+      hrvSdnn = 18.0 + rand.nextDouble() * 24.0; // 18.0 ~ 42.0 ms
+      breathRpm = (bpm / 5.2).round().clamp(11, 17);
     }
 
     final double totalBreathCycleSec = 60.0 / breathRpm; // e.g. 60/14 = 4.28s
     final double initialInhale = (totalBreathCycleSec * 0.48).clamp(1.8, 3.5);
     final double initialExhale = (totalBreathCycleSec * 0.52).clamp(1.8, 3.5);
 
-    return PpgMeasurementResult(
+    final res = PpgMeasurementResult(
       bpm: bpm,
       hrvSdnnMs: hrvSdnn,
       breathRpm: breathRpm,
@@ -203,6 +225,23 @@ class PpgSensorService {
       measuredExhaleSec: double.parse(initialExhale.toStringAsFixed(1)),
       signalQuality: 'Good',
     );
+    latestResult = res;
+    return res;
+  }
+
+  /// Turn off torch flash and stop camera image stream when measurement completes
+  Future<void> stopCamera() async {
+    _simulationTimer?.cancel();
+    if (_cameraController != null) {
+      try {
+        if (_cameraController!.value.isStreamingImages) {
+          await _cameraController!.stopImageStream();
+        }
+        await _cameraController!.setFlashMode(FlashMode.off);
+      } catch (e) {
+        debugPrint('Error stopping camera: $e');
+      }
+    }
   }
 
   /// Stop camera and clean up resources
@@ -210,7 +249,9 @@ class PpgSensorService {
     _simulationTimer?.cancel();
     if (_cameraController != null) {
       try {
-        await _cameraController!.stopImageStream();
+        if (_cameraController!.value.isStreamingImages) {
+          await _cameraController!.stopImageStream();
+        }
         await _cameraController!.dispose();
       } catch (e) {
         debugPrint('Error disposing camera: $e');

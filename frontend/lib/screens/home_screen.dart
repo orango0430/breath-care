@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -9,6 +10,8 @@ import 'log_screen.dart';
 import 'condition_measurement_screen.dart';
 import 'recommended_breathing_screen.dart';
 import 'breathing_exercise_screen.dart';
+import 'my_page_screen.dart';
+import '../utils/ppg_sensor_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
@@ -80,7 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Main Scrollable Content (switches between Home ritual view and Breath management view)
               SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.only(top: 12.0, bottom: 120.0),
+                padding: const EdgeInsets.only(top: 12.0, bottom: 90.0),
                 child: _selectedNavIndex == 2
                     ? _buildBreathView()
                     : _buildHomeView(),
@@ -187,21 +190,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Guest Pictogram Avatar Circle
   Widget _buildProfileAvatar() {
-    return Container(
-      width: 38,
-      height: 38,
-      decoration: BoxDecoration(
-        color: AppColors.slateDarkGray.withAlpha(150),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: AppColors.slateDarkGray,
-          width: 1,
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const MyPageScreen(),
+          ),
+        );
+      },
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: AppColors.slateDarkGray.withAlpha(150),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: AppColors.slateDarkGray,
+            width: 1,
+          ),
         ),
-      ),
-      child: const Icon(
-        Icons.person_rounded,
-        color: AppColors.lightGray,
-        size: 22,
+        child: const Icon(
+          Icons.person_rounded,
+          color: AppColors.lightGray,
+          size: 22,
+        ),
       ),
     );
   }
@@ -236,7 +248,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Card 1: 심박수 (HRV) Card with Line Graph
+  /// Card 1: 심박수 (HRV) Card with Line Chart Graph
   Widget _buildHrvCard() {
+    final latestRes = PpgSensorService.latestResult;
+    final currentConditionScore = latestRes?.conditionScore ?? conditionScore;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -261,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 6),
               const Text(
-                '심박수 (HRV)',
+                '컨디션 지수 (HRV)',
                 style: TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 13,
@@ -285,7 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               // Left: Score & Comparison
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -293,8 +309,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        '64',
-                        style: TextStyle(
+                        '$currentConditionScore',
+                        style: const TextStyle(
                           fontFamily: AppFonts.pretendard,
                           fontSize: 40,
                           fontWeight: FontWeight.w700,
@@ -302,8 +318,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: 1,
                         ),
                       ),
-                      SizedBox(width: 4),
-                      Text(
+                      const SizedBox(width: 4),
+                      const Text(
                         '/100',
                         style: TextStyle(
                           fontFamily: AppFonts.pretendard,
@@ -314,10 +330,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   Text(
-                    '어제보다 -6',
-                    style: TextStyle(
+                    currentConditionScore >= 75
+                        ? '지난 측정보다 안정적이에요'
+                        : '호흡을 통한 이완이 필요해요',
+                    style: const TextStyle(
                       fontFamily: AppFonts.pretendard,
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
@@ -346,6 +364,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Card 2: 스트레스 지수 Card (Pastel Yellow Container)
   Widget _buildStressCard() {
+    final latestRes = PpgSensorService.latestResult;
+    final currentStressIndex = latestRes?.stressIndex ?? 42;
+    final currentStressStatus = latestRes?.stressStatusText ?? '낮음';
+    final fillRatio = (currentStressIndex / 100.0).clamp(0.15, 0.95);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -367,14 +390,14 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Score & Status Row: 58 /100 보통
-          const Row(
+          // Score & Status Row
+          Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                '58',
-                style: TextStyle(
+                '$currentStressIndex',
+                style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 36,
                   fontWeight: FontWeight.w800,
@@ -382,8 +405,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   height: 1,
                 ),
               ),
-              SizedBox(width: 4),
-              Text(
+              const SizedBox(width: 4),
+              const Text(
                 '/100',
                 style: TextStyle(
                   fontFamily: AppFonts.pretendard,
@@ -392,10 +415,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Color(0xFF6B6E58),
                 ),
               ),
-              SizedBox(width: 10),
+              const SizedBox(width: 10),
               Text(
-                '보통',
-                style: TextStyle(
+                currentStressStatus,
+                style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -410,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
           LayoutBuilder(
             builder: (context, constraints) {
               final trackWidth = constraints.maxWidth;
-              final fillWidth = trackWidth * 0.58;
+              final fillWidth = trackWidth * fillRatio;
 
               return Container(
                 height: 6,
@@ -757,23 +780,23 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         // Top App Header: Logo + Notification Bell + Guest Avatar
         _buildHeader(),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
 
         // Title & Dynamic Today's Date
         _buildTitleAndDateSection(),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
 
         // Today's Condition Score Card with Bar Chart
         _buildConditionCard(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
         // HR & HRV Metric Cards Row
         _buildMetricCardsRow(),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
 
         // Today's Schedule Section
         _buildScheduleSection(),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
 
         // Reset Onboarding Dev Helper
         Center(
@@ -830,15 +853,14 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
+        Text(
           'Time For\nYour Ritual',
-          style: TextStyle(
-            fontFamily: AppFonts.gmarketSans,
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
+          style: GoogleFonts.outfit(
+            fontSize: 32,
+            fontWeight: FontWeight.w400,
             color: AppColors.white,
-            height: 1.2,
-            letterSpacing: 0.5,
+            height: 1.18,
+            letterSpacing: 0.2,
           ),
         ),
         InkWell(
@@ -874,6 +896,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 3. Today's Condition Score Card with 7-Bar Chart Indicator
   Widget _buildConditionCard() {
+    final latestRes = PpgSensorService.latestResult;
+    final displayScore = latestRes?.conditionScore ?? conditionScore;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -907,7 +932,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(
-                    '$conditionScore',
+                    '$displayScore',
                     style: const TextStyle(
                       fontFamily: AppFonts.pretendard,
                       fontSize: 42,
@@ -970,6 +995,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 4. HR & HRV Metric Cards Row
   Widget _buildMetricCardsRow() {
+    final latestRes = PpgSensorService.latestResult;
+    final displayBpm = latestRes?.bpm ?? heartRate;
+    final displayHrv = latestRes != null ? latestRes.hrvSdnnMs.round() : hrvValue;
+
     return Row(
       children: [
         Expanded(
@@ -1021,7 +1050,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      '$heartRate',
+                      '$displayBpm',
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 32,
@@ -1097,7 +1126,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      '$hrvValue',
+                      '$displayHrv',
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 32,
@@ -1175,14 +1204,26 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildScheduleCard(
           title: '프로젝트 회의 일정',
           time: '오후 2:30',
-          onTapPrepare: () {},
+          onTapPrepare: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const ConditionMeasurementScreen(),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 10),
 
         _buildScheduleCard(
           title: '중앙해커톤 본선 피칭',
           time: '오후 6:30',
-          onTapPrepare: () {},
+          onTapPrepare: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const ConditionMeasurementScreen(),
+              ),
+            );
+          },
         ),
       ],
     );
