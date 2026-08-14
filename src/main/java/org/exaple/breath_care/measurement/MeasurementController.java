@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.exaple.breath_care.global.response.ApiResponse;
 import org.exaple.breath_care.measurement.dto.BaselineResponse;
+import org.exaple.breath_care.measurement.dto.GuestMeasurementRequest;
+import org.exaple.breath_care.measurement.dto.GuestMeasurementResponse;
 import org.exaple.breath_care.measurement.dto.MeasurementRequest;
 import org.exaple.breath_care.measurement.dto.MeasurementResponse;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -38,6 +40,19 @@ public class MeasurementController {
 
         MeasurementResponse created = measurementService.measure(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(created));
+    }
+
+    /**
+     * 비회원 측정. <b>이 컨트롤러에서 유일하게 인증이 필요 없는 창구다.</b>
+     *
+     * <p>계산만 하고 저장하지 않는다. 기준선 재료가 되는 과거 심박수는 앱이 함께 보낸다.
+     * 저장을 하지 않으니 201이 아니라 200으로 응답한다.
+     */
+    @PostMapping("/analyze")
+    public ApiResponse<GuestMeasurementResponse> analyze(
+            @Valid @RequestBody GuestMeasurementRequest request) {
+
+        return ApiResponse.ok(measurementService.analyze(request));
     }
 
     /**
