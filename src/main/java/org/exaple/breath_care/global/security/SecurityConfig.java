@@ -39,7 +39,7 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/signup", "/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/social").permitAll()
                         // 비회원 측정. 저장하지 않고 계산만 하므로 인증 없이 연다.
                         // 메서드를 POST로 못 박아 같은 경로의 다른 요청이 새지 않게 한다.
                         .requestMatchers(HttpMethod.POST, "/api/measurements/analyze").permitAll()
