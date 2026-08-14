@@ -5,6 +5,7 @@ import org.exaple.breath_care.global.exception.ErrorCode;
 import org.exaple.breath_care.global.response.ApiResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -39,6 +40,9 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/signup", "/api/auth/login").permitAll()
+                        // 비회원 측정. 저장하지 않고 계산만 하므로 인증 없이 연다.
+                        // 메서드를 POST로 못 박아 같은 경로의 다른 요청이 새지 않게 한다.
+                        .requestMatchers(HttpMethod.POST, "/api/measurements/analyze").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handler -> handler
                         .authenticationEntryPoint(authenticationEntryPoint())
