@@ -7,8 +7,12 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public interface MeasurementRepository extends JpaRepository<Measurement, Long> {
+
+    /** 남의 측정을 내 세션에 묶지 못하게 항상 userId를 함께 조건에 넣는다. */
+    Optional<Measurement> findByIdAndUserId(Long id, Long userId);
 
     @Query("""
             select m from Measurement m
