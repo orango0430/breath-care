@@ -5,8 +5,11 @@ import org.exaple.breath_care.global.exception.BusinessException;
 import org.exaple.breath_care.global.exception.ErrorCode;
 import org.exaple.breath_care.measurement.dto.MeasurementRequest;
 import org.exaple.breath_care.measurement.dto.MeasurementResponse;
+import org.exaple.breath_care.measurement.score.Baseline;
+import org.exaple.breath_care.measurement.score.StressScoreCalculator;
 import org.exaple.breath_care.measurement.signal.SignalProcessor;
 import org.exaple.breath_care.measurement.signal.SignalResult;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,14 +42,25 @@ public class MeasurementService {
             throw new BusinessException(ErrorCode.POOR_SIGNAL_QUALITY);
         }
 
-        // 컨디션 지수는 개인 baseline이 있어야 산출할 수 있다. 지금은 비워 둔다.
+        // 이번 측정은 기준선에 넣지 않는다. 자기 자신과 비교하면 편차가 줄어든다.
+        Double stressScore = StressScoreCalculator.score(result.hr(), baselineOf(userId));
+
         Measurement measurement = measurementRepository.save(Measurement.create(
-                userId, result.hr(), result.hrv(), null, result.quality(), Instant.now()));
+                userId, result.hr(), result.hrv(), stressScore, result.quality(), Instant.now()));
 
         signalRepository.save(new MeasurementSignal(
                 measurement.getId(), request.fps(), request.durationSec(), join(request.samples())));
 
         return MeasurementResponse.from(measurement);
+    }
+
+    /** 최근 측정들로 만든 개인 기준선. 표본이 모자라면 아직 준비되지 않은 상태로 나온다. */
+    @Transactional(readOnly = true)
+    public Baseline baselineOf(Long userId) {
+        List<Double> recentHrs = measurementRepository.findRecentHr(
+                userId, PageRequest.of(0, StressScoreCalculator.BASELINE_WINDOW));
+
+        return StressScoreCalculator.baselineOf(recentHrs);
     }
 
     @Transactional(readOnly = true)
