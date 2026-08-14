@@ -3,6 +3,7 @@ package org.exaple.breath_care.measurement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.exaple.breath_care.global.response.ApiResponse;
+import org.exaple.breath_care.measurement.dto.BaselineResponse;
 import org.exaple.breath_care.measurement.dto.MeasurementRequest;
 import org.exaple.breath_care.measurement.dto.MeasurementResponse;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -37,6 +38,15 @@ public class MeasurementController {
 
         MeasurementResponse created = measurementService.measure(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(created));
+    }
+
+    /**
+     * 개인 기준선 상태. 스트레스 지수가 null인 이유를 앱이 설명할 수 있게 한다.
+     * (기준선이 없으면 "기준을 만드는 중이에요 · N회 더")
+     */
+    @GetMapping("/baseline")
+    public ApiResponse<BaselineResponse> baseline(@AuthenticationPrincipal Long userId) {
+        return ApiResponse.ok(BaselineResponse.from(measurementService.baselineOf(userId)));
     }
 
     /** 측정 이력. 최신순. */
