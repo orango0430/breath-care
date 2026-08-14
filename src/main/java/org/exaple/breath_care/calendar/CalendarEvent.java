@@ -42,24 +42,54 @@ public class CalendarEvent {
     @Column(nullable = false)
     private Instant startAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private EventSource source;
+
+    /** 폰 캘린더가 매긴 일정 id. 직접 입력한 일정은 비어 있다. */
+    @Column(length = 255)
+    private String externalId;
+
     @Column(nullable = false)
     private Instant createdAt;
 
-    private CalendarEvent(Long userId, String title, EventType eventType, Instant startAt) {
+    private CalendarEvent(Long userId, String title, EventType eventType, Instant startAt,
+                          EventSource source, String externalId) {
         this.userId = userId;
         this.title = title;
         this.eventType = eventType;
         this.startAt = startAt;
+        this.source = source;
+        this.externalId = externalId;
         this.createdAt = Instant.now();
     }
 
     public static CalendarEvent create(Long userId, String title, EventType eventType, Instant startAt) {
-        return new CalendarEvent(userId, title, eventType, startAt);
+        return new CalendarEvent(userId, title, eventType, startAt, EventSource.MANUAL, null);
+    }
+
+    /**
+     * 폰 캘린더에서 들어온 일정. 종류는 비워 둔다.
+     * 폰 일정에는 종류 정보가 없고, 제목으로 추측하면 틀리기 쉽다. 사용자가 앱에서 고르면 채워진다.
+     */
+    public static CalendarEvent fromPhone(Long userId, String title, Instant startAt, String externalId) {
+        return new CalendarEvent(userId, title, null, startAt, EventSource.PHONE, externalId);
     }
 
     public void update(String title, EventType eventType, Instant startAt) {
         this.title = title;
         this.eventType = eventType;
+        this.startAt = startAt;
+    }
+
+    /**
+     * 폰 캘린더의 변경사항만 반영한다.
+     *
+     * <p><b>eventType은 건드리지 않는다.</b> 사용자가 "시험"으로 골라 둔 것을
+     * 동기화할 때마다 지워 버리면 알림 문구가 계속 "일정"으로 되돌아간다.
+     */
+    public void syncFrom(String title, Instant startAt) {
+        this.title = title;
         this.startAt = startAt;
     }
 }
