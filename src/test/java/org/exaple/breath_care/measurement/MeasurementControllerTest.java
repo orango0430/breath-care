@@ -76,8 +76,8 @@ class MeasurementControllerTest {
                 .andExpect(jsonPath("$.data.hrv").isNumber())
                 .andExpect(jsonPath("$.data.quality").value("GOOD"))
                 .andExpect(jsonPath("$.data.measuredAt").isNotEmpty())
-                // baseline이 아직 없으므로 컨디션 지수는 비어 있다
-                .andExpect(jsonPath("$.data.conditionScore").doesNotExist());
+                // baseline이 아직 없으므로 스트레스 지수는 비어 있다
+                .andExpect(jsonPath("$.data.stressScore").doesNotExist());
     }
 
     @Test

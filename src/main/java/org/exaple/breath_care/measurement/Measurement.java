@@ -38,10 +38,10 @@ public class Measurement {
     private Double hrv;
 
     /**
-     * 컨디션 지수 0~100 (높을수록 좋음). 내부 스트레스 지수를 뒤집은 값이다.
-     * 개인 baseline이 쌓이기 전에는 산출할 수 없어 비어 있다.
+     * 스트레스 지수 0~100. <b>높을수록 긴장도가 높다.</b>
+     * 개인 baseline과 비교해 산출하므로, baseline이 쌓이기 전에는 비어 있다.
      */
-    private Double conditionScore;
+    private Double stressScore;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
@@ -50,18 +50,18 @@ public class Measurement {
     @Column(nullable = false)
     private Instant measuredAt;
 
-    private Measurement(Long userId, Double hr, Double hrv, Double conditionScore,
+    private Measurement(Long userId, Double hr, Double hrv, Double stressScore,
                         MeasurementQuality quality, Instant measuredAt) {
         this.userId = userId;
         this.hr = hr;
         this.hrv = hrv;
-        this.conditionScore = conditionScore;
+        this.stressScore = stressScore;
         this.quality = quality;
         this.measuredAt = measuredAt;
     }
 
-    public static Measurement create(Long userId, Double hr, Double hrv, Double conditionScore,
+    public static Measurement create(Long userId, Double hr, Double hrv, Double stressScore,
                                      MeasurementQuality quality, Instant measuredAt) {
-        return new Measurement(userId, hr, hrv, conditionScore, quality, measuredAt);
+        return new Measurement(userId, hr, hrv, stressScore, quality, measuredAt);
     }
 }
