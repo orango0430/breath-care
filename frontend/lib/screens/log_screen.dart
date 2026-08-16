@@ -7,6 +7,7 @@ import '../widgets/bpace_logo.dart';
 import 'home_screen.dart';
 import 'condition_measurement_screen.dart';
 import 'my_page_screen.dart';
+import 'add_schedule_modal.dart';
 
 class LogScreen extends StatefulWidget {
   final int initialSubTab;
@@ -490,7 +491,9 @@ class _LogScreenState extends State<LogScreen> {
               ),
             ),
             InkWell(
-              onTap: () {},
+              onTap: () {
+                AddScheduleModal.show(context, initialDate: _selectedDate);
+              },
               borderRadius: BorderRadius.circular(6),
               child: const Padding(
                 padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
