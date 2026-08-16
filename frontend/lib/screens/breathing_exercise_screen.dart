@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
 import '../utils/breathing_routine_model.dart';
 import 'breathing_completion_screen.dart';
 
-/// Guided Breathing Exercise Screen (호흡 진행 화면 - 사용자 측정 호흡에서 목표 템포로 적응형 유도)
+/// Guided Breathing Exercise Screen: 100% Exact Original Ball & Wave Animation Engine (from Image 1 git history) + Image 2 UI Layout
 class BreathingExerciseScreen extends StatefulWidget {
   final String title;
   final int totalCycles;
@@ -15,9 +16,12 @@ class BreathingExerciseScreen extends StatefulWidget {
   final double initialInhaleSec;
   final double initialExhaleSec;
 
+  final String bgImagePath;
+
   const BreathingExerciseScreen({
     super.key,
-    this.title = '긴장 완화 호흡',
+    this.title = '4-7-8 호흡',
+    this.bgImagePath = 'assets/images/bg_breath_478.png',
     this.totalCycles = 6,
     this.targetDurationMinutes = 5,
     this.routineModel,
@@ -35,20 +39,16 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   late AnimationController _animController;
   Timer? _durationTimer;
 
-  int elapsedSeconds = 80; // Default sample matching screenshot (01:20)
-  int currentCycle = 2; // Default sample matching screenshot (2 / 6 사이클)
+  int elapsedSeconds = 4; // Default sample (00:04)
+  int currentCycle = 1;
   bool isPlaying = true;
   int averageHrvBpmChange = -8;
-
-  // Sound / vibration settings toggle
-  bool isSoundEnabled = true;
-  bool isVibrationEnabled = true;
 
   @override
   void initState() {
     super.initState();
 
-    // Setup 10-second repeating animation for one full breathing cycle
+    // Exact original 10-second repeating animation controller
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 10),
@@ -64,7 +64,6 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
       if (isPlaying) {
         setState(() {
           elapsedSeconds++;
-          // Cycle progression every 10 seconds
           if (elapsedSeconds % 10 == 0 && currentCycle < widget.totalCycles) {
             currentCycle++;
           }
@@ -79,6 +78,8 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => BreathingCompletionScreen(
+          title: widget.title,
+          bgImagePath: widget.bgImagePath,
           durationString: _formattedTime,
           hrvChange: '$averageHrvBpmChange bpm',
         ),
@@ -113,87 +114,15 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     return '$mins:$secs';
   }
 
-  // Active routine target values or default 4-7-8
-  BreathingRoutineModel get _activeRoutine =>
-      widget.routineModel ?? BreathingRoutineModel.fromHrv(24.5);
-
-  // Ramp factor from 0.0 (cycle 1) to 1.0 (cycle N)
-  double get _rampFactor {
-    final n = widget.totalCycles;
-    if (n <= 1) return 1.0;
-    final k = (currentCycle - 1).clamp(0, n - 1);
-    return k / (n - 1).toDouble();
-  }
-
-  double get _currentInhaleSec {
-    final start = widget.initialInhaleSec;
-    final target = _activeRoutine.targetInhale;
-    return start + (target - start) * _rampFactor;
-  }
-
-  double get _currentHold1Sec {
-    const start = 0.0;
-    final target = _activeRoutine.targetHold1;
-    return start + (target - start) * _rampFactor;
-  }
-
-  double get _currentExhaleSec {
-    final start = widget.initialExhaleSec;
-    final target = _activeRoutine.targetExhale;
-    return start + (target - start) * _rampFactor;
-  }
-
-  double get _currentHold2Sec {
-    const start = 0.0;
-    final target = _activeRoutine.targetHold2;
-    return start + (target - start) * _rampFactor;
-  }
-
-  double get _currentCycleTotalSec {
-    return _currentInhaleSec + _currentHold1Sec + _currentExhaleSec + _currentHold2Sec;
-  }
-
-  /// Get current breathing phase ('들이마시기', '멈추기', '내쉬기', '휴식')
+  /// Get current phase label for ball tag
   String get _currentPhaseLabel {
     final val = _animController.value;
-    final total = _currentCycleTotalSec;
-    if (total <= 0) return '숨쉬기';
-
-    final tInhale = _currentInhaleSec / total;
-    final tHold1 = tInhale + (_currentHold1Sec / total);
-    final tExhale = tHold1 + (_currentExhaleSec / total);
-
-    if (val < tInhale) {
+    if (val < 0.38) {
       return '들이마시기';
-    } else if (val < tHold1) {
+    } else if (val < 0.62) {
       return '멈추기';
-    } else if (val < tExhale) {
+    } else {
       return '내쉬기';
-    } else {
-      return _activeRoutine.targetHold2 > 0 ? '멈추기' : '휴식';
-    }
-  }
-
-  /// Get current instruction title text
-  String get _currentInstructionText {
-    final val = _animController.value;
-    final total = _currentCycleTotalSec;
-    if (total <= 0) return '편안하게 숨을 쉬어보세요';
-
-    final tInhale = _currentInhaleSec / total;
-    final tHold1 = tInhale + (_currentHold1Sec / total);
-    final tExhale = tHold1 + (_currentExhaleSec / total);
-
-    if (val < tInhale) {
-      return '천천히 코로 숨을 들이마셔요 (${_currentInhaleSec.toStringAsFixed(1)}초)';
-    } else if (val < tHold1) {
-      return '숨을 잠시 멈추세요 (${_currentHold1Sec.toStringAsFixed(1)}초)';
-    } else if (val < tExhale) {
-      return '천천히 입으로 숨을 내쉬세요 (${_currentExhaleSec.toStringAsFixed(1)}초)';
-    } else {
-      return _activeRoutine.targetHold2 > 0
-          ? '숨을 멈추고 몰입하세요 (${_currentHold2Sec.toStringAsFixed(1)}초)'
-          : '편안하게 상태를 유지하세요';
     }
   }
 
@@ -206,125 +135,144 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
 
   @override
   Widget build(BuildContext context) {
-    final totalCycles = widget.totalCycles;
-
     return Scaffold(
       backgroundColor: AppColors.darkBg,
-      body: SafeArea(
-        child: ResponsiveContainer(
-          maxWidth: 600,
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              // App Bar Header: Close Button + Title
-              _buildHeader(context),
-              const SizedBox(height: 20),
-
-              // Segmented Cycle Progress Bar + "2 / 6 사이클"
-              _buildCycleProgress(totalCycles),
-              const SizedBox(height: 24),
-
-              // Main Animated Instruction Title: "천천히 코로 숨을 들이마셔요" / "천천히 코로 숨을 내쉬세요"
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 400),
-                child: Text(
-                  _currentInstructionText,
-                  key: ValueKey<String>(_currentInstructionText),
-                  style: const TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.white,
-                    height: 1.3,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Serene Frosted Background Image (matching Image 2)
+          Image.asset(
+            widget.bgImagePath,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF2C3440), Color(0xFF1E2228)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
-                  textAlign: TextAlign.center,
                 ),
+              );
+            },
+          ),
+
+          // 2. Dark Overlay for contrast & readability
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.black.withAlpha(120),
+                  Colors.black.withAlpha(170),
+                  Colors.black.withAlpha(220),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
-              const SizedBox(height: 20),
+            ),
+          ),
 
-              // Wave Line & Ball Animation Canvas Area
-              Expanded(
-                child: Stack(
-                  children: [
-                    // Interactive Animated Custom Wave Painter
-                    Positioned.fill(
-                      child: AnimatedBuilder(
-                        animation: _animController,
-                        builder: (context, child) {
-                          return CustomPaint(
-                            painter: _BreathingWavePainter(
-                              progress: _animController.value,
-                              phaseLabel: _currentPhaseLabel,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+          // 3. Screen Layout Content
+          SafeArea(
+            child: ResponsiveContainer(
+              maxWidth: 600,
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+              child: Column(
+                children: [
+                  // Top Header Row (Back Circle Button | Title | Refresh Circle Button)
+                  _buildHeader(context),
+                  const SizedBox(height: 16),
 
-                    // Reset / Restart Button on Bottom Right of Wave Canvas
-                    Positioned(
-                      right: 12,
-                      bottom: 12,
-                      child: GestureDetector(
-                        onTap: _restartExercise,
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.darkCharcoal.withAlpha(220),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppColors.slateDarkGray.withAlpha(100),
-                              width: 1,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.refresh_rounded,
-                            color: AppColors.lightGray,
-                            size: 22,
+                  // Middle Animated Wave Canvas (100% Exact Original Ball Animation + Image 2 Stage Dotted Lines)
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        // Vertical Stage Dotted Lines & Labels from Image 2 (4초 들이마시기 / 7초 멈추기 / 8초 내쉬기)
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _StageDottedLinesPainter(),
                           ),
                         ),
-                      ),
+
+                        // 100% Exact Original Ball & Wave Animation Engine
+                        Positioned.fill(
+                          child: AnimatedBuilder(
+                            animation: _animController,
+                            builder: (context, child) {
+                              return CustomPaint(
+                                painter: _BreathingWavePainter(
+                                  progress: _animController.value,
+                                  phaseLabel: _currentPhaseLabel,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Subtext Guide: "회원님의 컨디션에 맞춰 조정된 속도예요"
+                  const Text(
+                    '회원님의 컨디션에 맞춰 조정된 속도예요',
+                    style: TextStyle(
+                      fontFamily: AppFonts.pretendard,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFFB0B4BC),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Timer Display: 00:04
+                  Text(
+                    _formattedTime,
+                    style: GoogleFonts.outfit(
+                      fontSize: 38,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.white,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+
+                  // Bottom Controls Toolbar: [ Center Translucent Pause Circle ] + [ Right 종료하기 ]
+                  _buildBottomToolbar(),
+                  const SizedBox(height: 16),
+                ],
               ),
-              const SizedBox(height: 16),
-
-              // Stats Box: 소요 시간 (01:20) | 평균 심박 변화 (-8 bpm)
-              _buildStatsCard(),
-              const SizedBox(height: 20),
-
-              // Bottom Control Bar: 호흡 설정 | Pause/Play | 호흡 종료
-              _buildControlToolbar(),
-              const SizedBox(height: 16),
-
-              // Bottom Tag Pill: 현재 효과 긴장 완화 · 스트레스 감소
-              _buildEffectTagPill(),
-              const SizedBox(height: 16),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  /// Top App Bar Header with Close Icon & Screen Title
+  /// Top Header Bar matching Image 2
   Widget _buildHeader(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(
-            Icons.close_rounded,
-            color: AppColors.white,
-            size: 26,
+        // Left Translucent Circle Back Button
+        GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(50),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.arrow_back_rounded,
+              color: AppColors.white,
+              size: 20,
+            ),
           ),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
         ),
+
+        // Title: 4-7-8 호흡
         Text(
           widget.title,
           style: const TextStyle(
@@ -332,377 +280,168 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: AppColors.white,
+            letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(width: 32), // Spacer to center title
-      ],
-    );
-  }
 
-  /// Segmented Cycle Progress Bar (e.g. 5 segments) + Subtitle "2 / 6 사이클"
-  Widget _buildCycleProgress(int totalCycles) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(totalCycles, (index) {
-            final isFilled = index < currentCycle;
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: isFilled
-                    ? AppColors.white
-                    : AppColors.slateDarkGray.withAlpha(100),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            );
-          }),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          '$currentCycle / $totalCycles 사이클',
-          style: const TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            color: AppColors.lightGray,
+        // Right Translucent Circle Restart Button
+        GestureDetector(
+          onTap: _restartExercise,
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(50),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.refresh_rounded,
+              color: AppColors.white,
+              size: 20,
+            ),
           ),
         ),
       ],
     );
   }
 
-  /// Stats Container Card showing Elapsed Time & Average Heart Rate Change
-  Widget _buildStatsCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-      decoration: BoxDecoration(
-        color: AppColors.darkCharcoal,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.slateDarkGray.withAlpha(60),
-          width: 1,
-        ),
-      ),
-      child: Row(
+  /// Bottom Control Toolbar matching Image 2
+  Widget _buildBottomToolbar() {
+    return SizedBox(
+      height: 64,
+      child: Stack(
         children: [
-          // Left: Elapsed Time (소요 시간)
-          Expanded(
-            child: Column(
-              children: [
-                const Text(
-                  '소요 시간',
-                  style: TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.lightGray,
+          // Center Large Translucent Pause/Play Circle Button
+          Align(
+            alignment: Alignment.center,
+            child: GestureDetector(
+              onTap: _togglePlayPause,
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(60),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withAlpha(80),
+                    width: 1.5,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  _formattedTime,
-                  style: const TextStyle(
+                child: Icon(
+                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  color: AppColors.white,
+                  size: 32,
+                ),
+              ),
+            ),
+          ),
+
+          // Right End Text Button: 종료하기
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: _finishExercise,
+              child: const Padding(
+                padding: EdgeInsets.only(right: 12.0),
+                child: Text(
+                  '종료하기',
+                  style: TextStyle(
                     fontFamily: AppFonts.pretendard,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                     color: AppColors.white,
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          // Divider
-          Container(
-            width: 1,
-            height: 36,
-            color: AppColors.slateDarkGray.withAlpha(80),
-          ),
-
-          // Right: Average HR Change (평균 심박 변화)
-          Expanded(
-            child: Column(
-              children: [
-                const Text(
-                  '평균 심박 변화',
-                  style: TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.lightGray,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '$averageHrvBpmChange bpm',
-                  style: const TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.lightMint,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  /// Bottom Control Toolbar: 호흡 설정 | Play/Pause | 호흡 종료
-  Widget _buildControlToolbar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        // Left Action: 호흡 설정
-        GestureDetector(
-          onTap: _showSettingsBottomSheet,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.darkCharcoal,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppColors.slateDarkGray.withAlpha(80),
-                    width: 1,
-                  ),
-                ),
-                child: const Icon(
-                  Icons.tune_rounded,
-                  color: AppColors.lightGray,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                '호흡 설정',
-                style: TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.lightGray,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Center Action: Large Pause / Play Button
-        GestureDetector(
-          onTap: _togglePlayPause,
-          child: Container(
-            width: 68,
-            height: 68,
-            decoration: BoxDecoration(
-              color: AppColors.darkCharcoal,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppColors.slateDarkGray.withAlpha(120),
-                width: 1.5,
-              ),
-            ),
-            child: Icon(
-              isPlaying
-                  ? Icons.pause_rounded
-                  : Icons.play_arrow_rounded,
-              color: AppColors.white,
-              size: 36,
-            ),
-          ),
-        ),
-
-        // Right Action: 호흡 종료
-        GestureDetector(
-          onTap: _finishExercise,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.darkCharcoal,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppColors.slateDarkGray.withAlpha(80),
-                    width: 1,
-                  ),
-                ),
-                child: const Icon(
-                  Icons.stop_rounded,
-                  color: AppColors.lightGray,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                '호흡 종료',
-                style: TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.lightGray,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Bottom Status Tag Pill: 현재 효과 긴장 완화 · 스트레스 감소
-  Widget _buildEffectTagPill() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-      decoration: BoxDecoration(
-        color: AppColors.darkCharcoal.withAlpha(150),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.slateDarkGray.withAlpha(40),
-          width: 0.8,
-        ),
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '현재 효과  ',
-            style: TextStyle(
-              fontFamily: AppFonts.pretendard,
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              color: AppColors.lightGray,
-            ),
-          ),
-          Text(
-            '긴장 완화 · 스트레스 감소',
-            style: TextStyle(
-              fontFamily: AppFonts.pretendard,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Settings Bottom Sheet for customizing breathing preferences
-  void _showSettingsBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.darkCharcoal,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.slateDarkGray,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    '호흡 가이드 설정',
-                    style: TextStyle(
-                      fontFamily: AppFonts.pretendard,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SwitchListTile(
-                    activeThumbColor: AppColors.lightMint,
-                    title: const Text(
-                      '안내 소리 효과',
-                      style: TextStyle(
-                        fontFamily: AppFonts.pretendard,
-                        fontSize: 15,
-                        color: AppColors.white,
-                      ),
-                    ),
-                    value: isSoundEnabled,
-                    onChanged: (val) {
-                      setSheetState(() => isSoundEnabled = val);
-                      setState(() {});
-                    },
-                  ),
-                  SwitchListTile(
-                    activeThumbColor: AppColors.lightMint,
-                    title: const Text(
-                      '진동 박자 알림',
-                      style: TextStyle(
-                        fontFamily: AppFonts.pretendard,
-                        fontSize: 15,
-                        color: AppColors.white,
-                      ),
-                    ),
-                    value: isVibrationEnabled,
-                    onChanged: (val) {
-                      setSheetState(() => isVibrationEnabled = val);
-                      setState(() {});
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.lightMint,
-                        foregroundColor: AppColors.darkBg,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        '확인',
-                        style: TextStyle(
-                          fontFamily: AppFonts.pretendard,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }
 
-/// CustomPainter that renders Viewport-Tracked Seamless Breathing Wave focused on the ball near screen center
+/// Vertical Stage Dotted Lines Painter matching Image 2
+class _StageDottedLinesPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    final x1 = w * 0.25;
+    final x2 = w * 0.70;
+
+    final linePaint = Paint()
+      ..color = Colors.white.withAlpha(50)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    // Vertical Dotted Lines
+    _drawDottedVerticalLine(canvas, Offset(x1, h * 0.10), h * 0.75, linePaint);
+    _drawDottedVerticalLine(canvas, Offset(x2, h * 0.10), h * 0.75, linePaint);
+
+    const textStyleHeader = TextStyle(
+      fontFamily: AppFonts.pretendard,
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+      color: Colors.white,
+    );
+
+    const textStyleSub = TextStyle(
+      fontFamily: AppFonts.pretendard,
+      fontSize: 13,
+      fontWeight: FontWeight.w400,
+      color: Color(0xFFD0D4DC),
+    );
+
+    // Header Stage Labels
+    final tpInhale = TextPainter(
+      text: const TextSpan(text: '4초 들이마시기', style: textStyleHeader),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tpInhale.paint(canvas, Offset(x1 - tpInhale.width / 2, h * 0.22));
+
+    final tpHold = TextPainter(
+      text: const TextSpan(text: '7초 멈추기', style: textStyleSub),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tpHold.paint(canvas, Offset(x2 + 16, h * 0.22));
+
+    // Bottom Dotted Stage Labels
+    final tp4s = TextPainter(
+      text: const TextSpan(text: '4초', style: textStyleSub),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp4s.paint(canvas, Offset(x1 - tp4s.width / 2, h * 0.62));
+
+    final tp7s = TextPainter(
+      text: const TextSpan(text: '7초', style: textStyleSub),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp7s.paint(canvas, Offset(x2 + 10, h * 0.62));
+  }
+
+  void _drawDottedVerticalLine(Canvas canvas, Offset start, double height, Paint paint) {
+    const dashHeight = 4.0;
+    const dashSpace = 4.0;
+    double startY = start.dy;
+    final endY = start.dy + height;
+
+    while (startY < endY) {
+      canvas.drawLine(
+        Offset(start.dx, startY),
+        Offset(start.dx, (startY + dashHeight).clamp(startY, endY)),
+        paint,
+      );
+      startY += dashHeight + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// 100% EXACT ORIGINAL Viewport-Tracked Seamless Breathing Wave & Glowing Ball Painter (from Image 1 git history)
 class _BreathingWavePainter extends CustomPainter {
   final double progress; // 0.0 to 1.0
   final String phaseLabel;
@@ -789,7 +528,7 @@ class _BreathingWavePainter extends CustomPainter {
       ..strokeWidth = 1.6;
     canvas.drawPath(multiCyclePath, baseTrackPaint);
 
-    // 4. Draw Continuous Unbroken Active Glowing Ribbon around the Ball (끊김 없는 매끄러운 빛나는 궤적)
+    // 4. Draw Continuous Unbroken Active Glowing Ribbon around the Ball with Shader Gradient
     const backWindow = 280.0;
     const forwardWindow = 200.0;
     final startDist = (ballMultiDist - backWindow).clamp(0.0, multiLength);
@@ -823,7 +562,7 @@ class _BreathingWavePainter extends CustomPainter {
 
     canvas.restore();
 
-    // 5. Draw Outer Halo Glow of Ball (화면 중앙 공)
+    // 5. Draw Outer Radial Halo Glow of Ball (Screen Center)
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [

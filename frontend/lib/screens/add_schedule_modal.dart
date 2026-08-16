@@ -824,24 +824,28 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
 
   /// 6. Bottom Hint Graphic & Subtext
   Widget _buildBottomHintSection() {
-    return const Column(
-      children: [
-        // Mint Crystal Geometric Polyhedron
-        _MintCrystalGraphic(size: 52),
-        SizedBox(height: 14),
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Mint Crystal Geometric Polyhedron
+          _MintCrystalGraphic(size: 52),
+          SizedBox(height: 14),
 
-        Text(
-          '선택한 일정 전, 맞춤 호흡 타이밍을\n자동으로 제안해드려요.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            color: AppColors.slateGray,
-            height: 1.5,
+          Text(
+            '선택한 일정 전, 맞춤 호흡 타이밍을\n자동으로 제안해드려요.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: AppFonts.pretendard,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: AppColors.slateGray,
+              height: 1.5,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -47,6 +47,38 @@ class _LogScreenState extends State<LogScreen> {
   // Selected bottom navigation index (1 = Log)
   int _selectedNavIndex = 1;
 
+  // Dynamic Schedules List
+  final List<Map<String, dynamic>> _schedules = [
+    {
+      'title': '전공 세미나 발표',
+      'category': '발표',
+      'date': DateTime(2026, 8, 25),
+      'time': '오전 9:00',
+      'isCompleted': true,
+    },
+    {
+      'title': '졸업논문 심사',
+      'category': '시험',
+      'date': DateTime(2026, 8, 25),
+      'time': '오전 10:00',
+      'isCompleted': true,
+    },
+    {
+      'title': '프로젝트 회의 일정',
+      'category': '발표',
+      'date': DateTime(2026, 8, 25),
+      'time': '오후 2:30',
+      'isCompleted': false,
+    },
+    {
+      'title': '중앙해커톤 본선 피칭',
+      'category': '발표',
+      'date': DateTime(2026, 8, 25),
+      'time': '오후 6:30',
+      'isCompleted': false,
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -475,6 +507,13 @@ class _LogScreenState extends State<LogScreen> {
   }
 
   Widget _buildScheduleSection() {
+    final daySchedules = _schedules.where((s) {
+      final d = s['date'] as DateTime;
+      return d.year == _selectedDate.year &&
+          d.month == _selectedDate.month &&
+          d.day == _selectedDate.day;
+    }).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -492,7 +531,20 @@ class _LogScreenState extends State<LogScreen> {
             ),
             InkWell(
               onTap: () {
-                AddScheduleModal.show(context, initialDate: _selectedDate);
+                AddScheduleModal.show(
+                  context,
+                  initialDate: _selectedDate,
+                  onScheduleAdded: (newSchedule) {
+                    setState(() {
+                      _schedules.add(newSchedule);
+                      if (newSchedule['date'] != null) {
+                        final newDate = newSchedule['date'] as DateTime;
+                        _selectedDate = newDate;
+                        _currentDisplayMonth = DateTime(newDate.year, newDate.month, 1);
+                      }
+                    });
+                  },
+                );
               },
               borderRadius: BorderRadius.circular(6),
               child: const Padding(
@@ -522,32 +574,64 @@ class _LogScreenState extends State<LogScreen> {
         ),
         const SizedBox(height: 14),
 
-        _buildScheduleItem(
-          title: '전공 세미나 발표',
-          time: '오전 9:00',
-          isCompleted: true,
-        ),
-        const SizedBox(height: 10),
-
-        _buildScheduleItem(
-          title: '졸업논문 심사',
-          time: '오전 10:00',
-          isCompleted: true,
-        ),
-        const SizedBox(height: 10),
-
-        _buildScheduleItem(
-          title: '프로젝트 회의 일정',
-          time: '오후 2:30',
-          isCompleted: false,
-        ),
-        const SizedBox(height: 10),
-
-        _buildScheduleItem(
-          title: '중앙해커톤 본선 피칭',
-          time: '오후 6:30',
-          isCompleted: false,
-        ),
+        if (daySchedules.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+            decoration: BoxDecoration(
+              color: AppColors.darkCharcoal,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppColors.slateDarkGray.withAlpha(50),
+                width: 0.8,
+              ),
+            ),
+            child: const Column(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  color: AppColors.slateGray,
+                  size: 28,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  '선택한 날짜에 등록된 일정이 없습니다.',
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 14,
+                    color: AppColors.lightGray,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '상단의 "일정 추가하기"를 눌러 새 일정을 추가해 보세요.',
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 12,
+                    color: AppColors.slateGray,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ...List.generate(daySchedules.length, (index) {
+            final schedule = daySchedules[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10.0),
+              child: _buildScheduleItem(
+                title: schedule['title'] ?? '',
+                time: schedule['time'] ?? '',
+                isCompleted: schedule['isCompleted'] ?? false,
+                onToggle: () {
+                  setState(() {
+                    schedule['isCompleted'] = !(schedule['isCompleted'] as bool);
+                  });
+                },
+              ),
+            );
+          }),
       ],
     );
   }
@@ -556,6 +640,7 @@ class _LogScreenState extends State<LogScreen> {
     required String title,
     required String time,
     required bool isCompleted,
+    required VoidCallback onToggle,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -606,7 +691,7 @@ class _LogScreenState extends State<LogScreen> {
           ),
 
           ElevatedButton(
-            onPressed: () {},
+            onPressed: onToggle,
             style: ElevatedButton.styleFrom(
               backgroundColor: isCompleted
                   ? AppColors.slateDarkGray.withAlpha(120)
@@ -773,25 +858,81 @@ class _LogScreenState extends State<LogScreen> {
         ),
         const SizedBox(height: 14),
 
+        // Item 1
         _buildRecordCardItem(
           title: '전공 세미나 발표',
           time: '오전 8:45',
           statusTag: '보통',
-          statusTagBgColor: const Color(0xFF535639),
-          statusTagTextColor: const Color(0xFFF8F8AA),
+          statusTagBgColor: const Color(0xFF484729),
+          statusTagTextColor: const Color(0xFFE0F5A0),
           score: 57,
           isEvaluated: true,
         ),
         const SizedBox(height: 10),
 
+        // Item 2
         _buildRecordCardItem(
           title: '졸업논문 심사',
           time: '오전 9:30',
           statusTag: '좋음',
-          statusTagBgColor: const Color(0xFF434A56),
-          statusTagTextColor: const Color(0xFFD6E2F6),
+          statusTagBgColor: const Color(0xFF384351),
+          statusTagTextColor: const Color(0xFFBFE0FF),
           score: 81,
           isEvaluated: true,
+        ),
+        const SizedBox(height: 10),
+
+        // Item 3
+        _buildRecordCardItem(
+          title: '프로젝트 회의 일정',
+          time: '진행 전',
+          isEvaluated: false,
+        ),
+        const SizedBox(height: 10),
+
+        // Item 4
+        _buildRecordCardItem(
+          title: '중앙해커톤 본선 피칭',
+          time: '진행 전',
+          isEvaluated: false,
+        ),
+        const SizedBox(height: 24),
+
+        // Bottom "Ritual 시작하기" Full-Width Light Mint Rounded Button
+        GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const ConditionMeasurementScreen(),
+              ),
+            );
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.lightMint,
+              borderRadius: BorderRadius.circular(27),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.lightMint.withAlpha(80),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text(
+                'Ritual 시작하기',
+                style: TextStyle(
+                  fontFamily: AppFonts.pretendard,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.darkBg,
+                ),
+              ),
+            ),
+          ),
         ),
       ],
     );
