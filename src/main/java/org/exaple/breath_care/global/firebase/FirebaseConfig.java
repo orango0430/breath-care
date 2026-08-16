@@ -3,6 +3,7 @@ package org.exaple.breath_care.global.firebase;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
+import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.messaging.FirebaseMessaging;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,5 +45,11 @@ public class FirebaseConfig {
     @Bean
     public FirebaseMessaging firebaseMessaging(FirebaseApp app) {
         return FirebaseMessaging.getInstance(app);
+    }
+
+    /** 소셜 로그인 토큰 검증에 쓴다. */
+    @Bean
+    public FirebaseAuth firebaseAuth(FirebaseApp app) {
+        return FirebaseAuth.getInstance(app);
     }
 }
