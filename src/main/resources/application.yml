@@ -1,6 +1,11 @@
 spring:
   application:
     name: breath-care
+  # 스프링은 .env를 저절로 읽지 않는다. docker-compose가 읽어 주는 것과 헷갈리기 쉬운데,
+  # gradlew bootRun으로 띄우면 .env에 뭘 넣든 반영되지 않는다. 그래서 명시적으로 불러온다.
+  # optional: 이라 파일이 없어도 앱은 그대로 뜬다 (CI·키 없는 팀원).
+  config:
+    import: optional:file:./.env[.properties]
   profiles:
     default: local
   jpa:
@@ -27,6 +32,27 @@ firebase:
   # 켜면 LoggingPushSender 대신 FcmPushSender가 등록된다.
   enabled: ${FIREBASE_ENABLED:false}
   credentials-location: ${FIREBASE_CREDENTIALS:file:./firebase-service-account.json}
+
+gemini:
+  # AI 리포트 생성에만 쓴다. 키가 없는 팀원도 앱을 띄울 수 있도록 기본값은 꺼짐.
+  # 켜면 DisabledReportGenerator 대신 GeminiReportGenerator가 등록된다.
+  enabled: ${GEMINI_ENABLED:false}
+  # 절대 커밋하지 않는다. 환경변수로만 주입한다.
+  api-key: ${GEMINI_API_KEY:}
+  # 버전을 박지 않고 별칭을 기본값으로 둔다. 모델은 생각보다 빨리 사라진다.
+  # (gemini-2.0-flash는 목록에서 없어졌고, gemini-2.5-flash는 신규 키로 404가 난다)
+  # 특정 버전에 고정해야 하면 GEMINI_MODEL로 덮어쓴다.
+  # 쓸 수 있는 목록: GET https://generativelanguage.googleapis.com/v1beta/models
+  model: ${GEMINI_MODEL:gemini-flash-latest}
+  # 무료 한도를 지키기 위한 안전장치. 자세한 계산은 ReportService 주석 참고.
+  min-measurements: 3
+  regenerate-cooldown-hours: 6
+  # 시안의 리포트가 문단 네 개 분량이다. 더 줄이면 JSON이 끝나기 전에 잘린다.
+  max-output-tokens: 900
+  # 0 = 생각 끄기. 요즘 flash는 추론 모델이라 켜 두면 생각 토큰이
+  # max-output-tokens를 같이 깎아먹어 본문이 잘린다. 이 작업엔 추론이 필요 없다.
+  thinking-budget: 0
+  timeout-seconds: 20
 
 logging:
   level:

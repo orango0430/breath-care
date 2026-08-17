@@ -24,10 +24,19 @@ public enum ErrorCode {
     /** 품질 게이트: 손 흔들림·조명 문제 등으로 신호를 신뢰할 수 없을 때. 계산하지 않고 재측정을 요구한다. */
     POOR_SIGNAL_QUALITY(HttpStatus.UNPROCESSABLE_CONTENT, "신호 품질이 낮습니다. 다시 측정해 주세요."),
 
+    /**
+     * 리포트를 쓸 만큼 측정이 쌓이지 않았다.
+     * 이 검사는 Gemini를 부르기 <b>전에</b> 한다. 측정 한 건으로 만든 리포트는 내용도 없으면서 호출만 축낸다.
+     */
+    INSUFFICIENT_DATA(HttpStatus.UNPROCESSABLE_CONTENT, "리포트를 만들기엔 측정 기록이 부족해요."),
+
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),
 
     /** 서버에 소셜 로그인 설정이 없을 때. 사용자 잘못이 아니므로 5xx로 구분한다. */
-    SOCIAL_LOGIN_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "지금은 소셜 로그인을 쓸 수 없어요. 이메일로 로그인해 주세요.");
+    SOCIAL_LOGIN_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "지금은 소셜 로그인을 쓸 수 없어요. 이메일로 로그인해 주세요."),
+
+    /** 서버에 Gemini 키가 없거나 호출이 실패했을 때. 측정·통계는 그대로 쓸 수 있으므로 앱은 리포트 영역만 비우면 된다. */
+    REPORT_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "지금은 리포트를 만들 수 없어요. 잠시 후 다시 시도해 주세요.");
 
     private final HttpStatus status;
     private final String defaultMessage;

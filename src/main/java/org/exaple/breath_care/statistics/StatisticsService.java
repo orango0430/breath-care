@@ -30,7 +30,15 @@ public class StatisticsService {
 
     @Transactional(readOnly = true)
     public StatisticsSummaryResponse summary(Long userId, Instant from, Instant to) {
-        DayRange range = DayRange.of(from, to);
+        return summary(userId, DayRange.of(from, to));
+    }
+
+    /**
+     * 구간을 이미 정해 둔 호출자용. AI 리포트는 요약과 일별을 같은 구간으로 묶어야 해서,
+     * Instant를 넘겨 양쪽에서 따로 날짜로 환산하면 자정 근처에서 구간이 어긋날 수 있다.
+     */
+    @Transactional(readOnly = true)
+    public StatisticsSummaryResponse summary(Long userId, DayRange range) {
         List<Measurement> measurements = measurementsIn(userId, range);
 
         return new StatisticsSummaryResponse(
@@ -44,8 +52,11 @@ public class StatisticsService {
 
     @Transactional(readOnly = true)
     public List<DailyMetric> daily(Long userId, Instant from, Instant to) {
-        DayRange range = DayRange.of(from, to);
+        return daily(userId, DayRange.of(from, to));
+    }
 
+    @Transactional(readOnly = true)
+    public List<DailyMetric> daily(Long userId, DayRange range) {
         Map<LocalDate, List<Measurement>> byDate = measurementsIn(userId, range).stream()
                 .collect(Collectors.groupingBy(m -> range.dateOf(m.getMeasuredAt())));
 
