@@ -41,14 +41,30 @@ final class GeminiApi {
      * @param responseMimeType application/json으로 두면 모델이 산문 대신 JSON만 낸다.
      *                         "```json" 같은 군더더기를 벗겨낼 필요가 없어진다
      * @param responseSchema   구조를 못 박아 두면 필드가 빠지거나 이름이 달라지는 일이 없다
+     * @param thinkingConfig   추론 모델의 생각 토큰 조절
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     record GenerationConfig(
             double temperature,
             int maxOutputTokens,
             String responseMimeType,
-            Schema responseSchema
+            Schema responseSchema,
+            ThinkingConfig thinkingConfig
     ) {
+    }
+
+    /**
+     * 요즘 flash 모델은 추론 모델이라 답하기 전에 "생각"을 하고,
+     * <b>그 생각 토큰이 maxOutputTokens를 같이 깎아먹는다.</b>
+     * 껐을 때와 안 껐을 때 같은 프롬프트에서 생각에만 수십~수백 토큰이 더 든다.
+     *
+     * <p>이 작업은 집계된 숫자를 문장으로 옮기는 일이라 추론이 필요 없다.
+     * 꺼 두면 비용도 줄고 본문이 상한에서 잘릴 위험도 사라진다.
+     *
+     * @param thinkingBudget 0이면 끔. -1은 모델이 알아서 정함
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record ThinkingConfig(int thinkingBudget) {
     }
 
     /** OpenAPI 스키마의 아주 일부만 쓴다. 배열이면 items, 객체면 properties가 채워진다. */
@@ -69,7 +85,7 @@ final class GeminiApi {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record GenerateResponse(List<Candidate> candidates) {
+    record GenerateResponse(List<Candidate> candidates, UsageMetadata usageMetadata) {
 
         /** 응답 어디가 비어 있어도 터지지 않게 한 번에 훑는다. 못 찾으면 null. */
         String firstText() {
@@ -90,5 +106,19 @@ final class GeminiApi {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Candidate(Content content, String finishReason) {
+    }
+
+    /**
+     * 실제로 쓴 토큰. 남겨 두지 않으면 사용량을 아꼈는지 확인할 방법이 없다.
+     *
+     * @param thoughtsTokenCount 생각 토큰. 0이 아니면 thinkingConfig가 안 먹은 것이다
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record UsageMetadata(
+            Integer promptTokenCount,
+            Integer candidatesTokenCount,
+            Integer thoughtsTokenCount,
+            Integer totalTokenCount
+    ) {
     }
 }

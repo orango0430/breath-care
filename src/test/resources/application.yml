@@ -31,4 +31,5 @@ gemini:
   min-measurements: 3
   regenerate-cooldown-hours: 6
   max-output-tokens: 900
+  thinking-budget: 0
   timeout-seconds: 20

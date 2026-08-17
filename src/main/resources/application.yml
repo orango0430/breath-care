@@ -49,6 +49,9 @@ gemini:
   regenerate-cooldown-hours: 6
   # 시안의 리포트가 문단 네 개 분량이다. 더 줄이면 JSON이 끝나기 전에 잘린다.
   max-output-tokens: 900
+  # 0 = 생각 끄기. 요즘 flash는 추론 모델이라 켜 두면 생각 토큰이
+  # max-output-tokens를 같이 깎아먹어 본문이 잘린다. 이 작업엔 추론이 필요 없다.
+  thinking-budget: 0
   timeout-seconds: 20
 
 logging:

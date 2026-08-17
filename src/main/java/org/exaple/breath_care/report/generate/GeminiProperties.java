@@ -10,6 +10,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param minMeasurements         이 수보다 측정이 적으면 호출하지 않고 막는다
  * @param regenerateCooldownHours 강제 재생성 최소 간격
  * @param maxOutputTokens         출력 상한. 길게 쓰라고 둘 이유가 없다
+ * @param thinkingBudget          추론 모델의 생각 토큰 예산. 0이면 끔.
+ *                                생각을 반드시 해야 하는 모델로 갈아타면 여기만 올리면 된다
  */
 @ConfigurationProperties(prefix = "gemini")
 public record GeminiProperties(
@@ -19,6 +21,7 @@ public record GeminiProperties(
         int minMeasurements,
         int regenerateCooldownHours,
         int maxOutputTokens,
+        int thinkingBudget,
         int timeoutSeconds
 ) {
 }

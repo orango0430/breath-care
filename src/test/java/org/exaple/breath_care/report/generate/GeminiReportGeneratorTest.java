@@ -51,7 +51,7 @@ class GeminiReportGeneratorTest {
         generator = new GeminiReportGenerator(
                 builder.build(),
                 mapper,
-                new GeminiProperties(true, "test-key", MODEL, 3, 6, 900, 20));
+                new GeminiProperties(true, "test-key", MODEL, 3, 6, 900, 0, 20));
     }
 
     private ReportInput input() {
@@ -103,6 +103,8 @@ class GeminiReportGeneratorTest {
                 // 스키마를 못 박아야 필드 이름이 흔들리지 않는다
                 .andExpect(jsonPath("$.generationConfig.responseSchema.required").isArray())
                 .andExpect(jsonPath("$.generationConfig.responseSchema.properties.insights.type").value("ARRAY"))
+                // 생각 토큰이 켜져 있으면 출력 상한을 같이 깎아먹어 본문이 잘린다
+                .andExpect(jsonPath("$.generationConfig.thinkingConfig.thinkingBudget").value(0))
                 // HRV 방향을 알려주는 시스템 지시가 빠지면 리포트가 거꾸로 해석한다
                 .andExpect(jsonPath("$.systemInstruction.parts[0].text").exists())
                 .andRespond(withSuccess(

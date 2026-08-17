@@ -42,6 +42,7 @@ public class GeminiReportGenerator implements ReportGenerator {
     @Override
     public ReportContent generate(ReportInput input) {
         GeminiApi.GenerateResponse response = call(buildRequest(input));
+        logUsage(response.usageMetadata());
 
         String json = response.firstText();
         if (json == null || json.isBlank()) {
@@ -66,7 +67,8 @@ public class GeminiReportGenerator implements ReportGenerator {
                         TEMPERATURE,
                         properties.maxOutputTokens(),
                         JSON_MIME,
-                        ReportPrompt.responseSchema()));
+                        ReportPrompt.responseSchema(),
+                        new GeminiApi.ThinkingConfig(properties.thinkingBudget())));
     }
 
     private GeminiApi.GenerateResponse call(GeminiApi.GenerateRequest request) {
@@ -87,6 +89,19 @@ public class GeminiReportGenerator implements ReportGenerator {
             log.warn("Gemini 호출 실패", e);
             throw new BusinessException(ErrorCode.REPORT_UNAVAILABLE);
         }
+    }
+
+    /**
+     * 리포트 한 건에 든 토큰을 남긴다. 캐시가 실제로 호출을 막고 있는지는
+     * 이 줄이 얼마나 드물게 찍히는지로 확인한다.
+     */
+    private void logUsage(GeminiApi.UsageMetadata usage) {
+        if (usage == null) {
+            return;
+        }
+        log.info("Gemini usage: prompt={} output={} thoughts={} total={}",
+                usage.promptTokenCount(), usage.candidatesTokenCount(),
+                usage.thoughtsTokenCount(), usage.totalTokenCount());
     }
 
     private ReportContent parse(String json) {
