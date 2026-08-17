@@ -1,0 +1,33 @@
+# 빌드 컨텍스트는 도커 데몬으로 통째로 전송된다. 안 걸러 두면
+# frontend/build와 .git까지 매번 올라가서 빌드가 눈에 띄게 느려진다.
+
+.git
+.gitignore
+.gradle
+build/
+out/
+bin/
+
+# Flutter 앱. 서버 이미지와 아무 상관이 없다.
+frontend/
+
+.idea
+*.iml
+.vscode/
+
+# 비밀값은 절대 이미지에 굽지 않는다.
+# 이미지 레이어는 지워도 이력에 남고, 레지스트리에 올리면 그대로 따라간다.
+# 키는 실행 시점에 환경변수와 볼륨 마운트로만 넣는다.
+.env
+.env.*
+!.env.prod.example
+firebase-service-account.json
+**/firebase-service-account*.json
+google-services.json
+
+# 문서·시안
+*.md
+*.png
+*.docx
+docker-compose*.yml
+Dockerfile

@@ -20,7 +20,9 @@ spring:
     baseline-on-migrate: true
 
 server:
-  port: 8080
+  # PaaS(Railway 등)는 붙일 포트를 PORT로 넘겨주고, 거기에 안 붙으면 배포가 실패한다.
+  # 로컬과 EC2에서는 PORT가 없으니 그대로 8080이다.
+  port: ${PORT:8080}
 
 jwt:
   # 운영에서는 반드시 환경변수로 주입한다. (HS256 기준 최소 32바이트)
@@ -31,7 +33,9 @@ firebase:
   # 서비스 계정 키가 없는 팀원도 앱을 띄울 수 있도록 기본값은 꺼짐.
   # 켜면 LoggingPushSender 대신 FcmPushSender가 등록된다.
   enabled: ${FIREBASE_ENABLED:false}
+  # 키를 주는 방법이 둘이다. base64가 있으면 그쪽이 우선이다. (FirebaseConfig 주석 참고)
   credentials-location: ${FIREBASE_CREDENTIALS:file:./firebase-service-account.json}
+  credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
 
 report:
   # none | gemini | openai. 켜진 제공자 하나만 빈으로 뜬다.
