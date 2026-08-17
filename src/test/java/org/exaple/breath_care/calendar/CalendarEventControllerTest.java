@@ -86,6 +86,50 @@ class CalendarEventControllerTest {
     }
 
     @Test
+    @DisplayName("카테고리를 직접 지으면 그 이름이 표시명이 된다")
+    void createWithCustomCategory() throws Exception {
+        mockMvc.perform(post(EVENTS)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"정기 공연","eventType":"ETC","customCategory":"동아리",
+                                 "startAt":"2026-09-15T14:00:00+09:00"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.customCategory").value("동아리"))
+                // 앱이 분기를 다시 짜지 않도록 서버가 표시명을 계산해 준다
+                .andExpect(jsonPath("$.data.displayCategory").value("동아리"))
+                // 이름만 바뀐다. 호흡 추천의 근거인 종류는 그대로 남는다
+                .andExpect(jsonPath("$.data.eventType").value("ETC"));
+    }
+
+    @Test
+    @DisplayName("카테고리를 안 지으면 종류의 기본 이름이 표시명이 된다")
+    void displayCategoryFallsBackToEventType() throws Exception {
+        mockMvc.perform(post(EVENTS)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(eventBody("중간고사", "EXAM", "2026-09-15T14:00:00+09:00")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.customCategory").doesNotExist())
+                .andExpect(jsonPath("$.data.displayCategory").value("시험"));
+    }
+
+    @Test
+    @DisplayName("카테고리 이름이 20자를 넘으면 400")
+    void rejectsTooLongCustomCategory() throws Exception {
+        mockMvc.perform(post(EVENTS)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"공연","eventType":"ETC","customCategory":"%s",
+                                 "startAt":"2026-09-15T14:00:00+09:00"}
+                                """.formatted("가".repeat(21))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+    }
+
+    @Test
     @DisplayName("일정명이 비면 400")
     void create_blankTitle() throws Exception {
         mockMvc.perform(post(EVENTS)

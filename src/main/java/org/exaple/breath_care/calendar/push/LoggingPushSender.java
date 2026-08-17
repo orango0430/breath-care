@@ -32,8 +32,8 @@ public class LoggingPushSender implements PushSender {
             return;
         }
 
-        log.info("[PUSH-DRYRUN] userId={} eventId={} type={} devices={} title={} body={}",
-                message.userId(), message.eventId(), message.pushType(), tokens.size(),
+        log.info("[PUSH-DRYRUN] userId={} eventId={} type={} preset={} devices={} title={} body={}",
+                message.userId(), message.eventId(), message.pushType(), message.preset(), tokens.size(),
                 message.title(), message.body());
     }
 }

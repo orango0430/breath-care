@@ -10,7 +10,11 @@ import java.time.Instant;
 /**
  * 일정 등록·수정 요청. 등록과 수정이 같은 필드를 쓰므로 하나로 둔다.
  *
- * @param startAt 오프셋 포함 ISO-8601. 예) 2026-08-15T14:00:00+09:00
+ * @param customCategory 시안의 "+"로 직접 만든 카테고리 이름. 안 쓰면 비운다.
+ *                       <b>이름만 바뀌고 호흡 추천은 eventType이 정한다.</b>
+ *                       그래서 "+"로 만든 카테고리라도 eventType은 함께 보내야 하며,
+ *                       성격을 모르면 ETC로 보내면 된다
+ * @param startAt        오프셋 포함 ISO-8601. 예) 2026-08-15T14:00:00+09:00
  */
 public record CalendarEventRequest(
 
@@ -20,6 +24,9 @@ public record CalendarEventRequest(
 
         @NotNull(message = "일정 종류는 필수입니다.")
         EventType eventType,
+
+        @Size(max = 20, message = "카테고리 이름은 20자 이하여야 합니다.")
+        String customCategory,
 
         @NotNull(message = "일정 시각은 필수입니다.")
         Instant startAt

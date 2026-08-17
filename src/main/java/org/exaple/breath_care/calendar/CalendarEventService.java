@@ -20,7 +20,7 @@ public class CalendarEventService {
     @Transactional
     public CalendarEventResponse create(Long userId, CalendarEventRequest request) {
         CalendarEvent event = CalendarEvent.create(
-                userId, request.title(), request.eventType(), request.startAt());
+                userId, request.title(), request.eventType(), request.customCategory(), request.startAt());
 
         return CalendarEventResponse.from(calendarEventRepository.save(event));
     }
@@ -35,7 +35,7 @@ public class CalendarEventService {
     @Transactional
     public CalendarEventResponse update(Long userId, Long eventId, CalendarEventRequest request) {
         CalendarEvent event = findOwned(userId, eventId);
-        event.update(request.title(), request.eventType(), request.startAt());
+        event.update(request.title(), request.eventType(), request.customCategory(), request.startAt());
         return CalendarEventResponse.from(event);
     }
 

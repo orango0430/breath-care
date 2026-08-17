@@ -6,6 +6,7 @@ import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.MulticastMessage;
 import com.google.firebase.messaging.SendResponse;
+import org.exaple.breath_care.breathing.BreathingPreset;
 import org.exaple.breath_care.device.DeviceService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,8 @@ class FcmPushSenderTest {
     FcmPushSender sender;
 
     private final PushMessage message =
-            new PushMessage(1L, "내일 시험이 있어요", "자기 전 호흡할까요?", 10L, PushType.DAY_BEFORE);
+            new PushMessage(1L, "내일 시험이 있어요", "자기 전 호흡할까요?", 10L, PushType.DAY_BEFORE,
+                    BreathingPreset.FOUR_SEVEN_EIGHT);
 
     /** 주의: mock 생성과 스터빙은 given(...) 바깥에서 끝내야 한다. */
     private static SendResponse failureWith(MessagingErrorCode code) {
