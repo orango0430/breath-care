@@ -1,6 +1,11 @@
 spring:
   application:
     name: breath-care
+  # 스프링은 .env를 저절로 읽지 않는다. docker-compose가 읽어 주는 것과 헷갈리기 쉬운데,
+  # gradlew bootRun으로 띄우면 .env에 뭘 넣든 반영되지 않는다. 그래서 명시적으로 불러온다.
+  # optional: 이라 파일이 없어도 앱은 그대로 뜬다 (CI·키 없는 팀원).
+  config:
+    import: optional:file:./.env[.properties]
   profiles:
     default: local
   jpa:
@@ -34,8 +39,11 @@ gemini:
   enabled: ${GEMINI_ENABLED:false}
   # 절대 커밋하지 않는다. 환경변수로만 주입한다.
   api-key: ${GEMINI_API_KEY:}
-  # 모델 이름을 코드가 아니라 설정에 두면, 새 모델로 갈아탈 때 재배포만 하면 된다.
-  model: ${GEMINI_MODEL:gemini-2.0-flash}
+  # 버전을 박지 않고 별칭을 기본값으로 둔다. 모델은 생각보다 빨리 사라진다.
+  # (gemini-2.0-flash는 목록에서 없어졌고, gemini-2.5-flash는 신규 키로 404가 난다)
+  # 특정 버전에 고정해야 하면 GEMINI_MODEL로 덮어쓴다.
+  # 쓸 수 있는 목록: GET https://generativelanguage.googleapis.com/v1beta/models
+  model: ${GEMINI_MODEL:gemini-flash-latest}
   # 무료 한도를 지키기 위한 안전장치. 자세한 계산은 ReportService 주석 참고.
   min-measurements: 3
   regenerate-cooldown-hours: 6

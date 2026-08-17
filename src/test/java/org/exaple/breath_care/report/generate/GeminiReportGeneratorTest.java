@@ -36,7 +36,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class GeminiReportGeneratorTest {
 
     private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
-    private static final String MODEL = "gemini-2.0-flash";
+    private static final String MODEL = "gemini-flash-latest";
 
     private final ObjectMapper mapper = JsonMapper.builder().build();
 
