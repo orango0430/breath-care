@@ -28,6 +28,21 @@ firebase:
   enabled: ${FIREBASE_ENABLED:false}
   credentials-location: ${FIREBASE_CREDENTIALS:file:./firebase-service-account.json}
 
+gemini:
+  # AI 리포트 생성에만 쓴다. 키가 없는 팀원도 앱을 띄울 수 있도록 기본값은 꺼짐.
+  # 켜면 DisabledReportGenerator 대신 GeminiReportGenerator가 등록된다.
+  enabled: ${GEMINI_ENABLED:false}
+  # 절대 커밋하지 않는다. 환경변수로만 주입한다.
+  api-key: ${GEMINI_API_KEY:}
+  # 모델 이름을 코드가 아니라 설정에 두면, 새 모델로 갈아탈 때 재배포만 하면 된다.
+  model: ${GEMINI_MODEL:gemini-2.0-flash}
+  # 무료 한도를 지키기 위한 안전장치. 자세한 계산은 ReportService 주석 참고.
+  min-measurements: 3
+  regenerate-cooldown-hours: 6
+  # 시안의 리포트가 문단 네 개 분량이다. 더 줄이면 JSON이 끝나기 전에 잘린다.
+  max-output-tokens: 900
+  timeout-seconds: 20
+
 logging:
   level:
     org.exaple.breath_care: DEBUG
