@@ -103,7 +103,22 @@ final class OpenAiApi {
     record Usage(
             @JsonProperty("prompt_tokens") Integer promptTokens,
             @JsonProperty("completion_tokens") Integer completionTokens,
-            @JsonProperty("total_tokens") Integer totalTokens
+            @JsonProperty("total_tokens") Integer totalTokens,
+            @JsonProperty("completion_tokens_details") CompletionDetails completionDetails
     ) {
+        /** 추론에 쓴 토큰. 못 찾으면 null. */
+        Integer reasoningTokens() {
+            return (completionDetails == null) ? null : completionDetails.reasoningTokens();
+        }
+    }
+
+    /**
+     * gpt-5 계열은 추론 모델이라 답하기 전에 "생각"을 할 수 있고,
+     * <b>그 토큰이 completion_tokens에 포함돼 max_completion_tokens를 같이 깎아먹는다.</b>
+     * 본문이 상한에서 잘리기 시작하면 여기부터 확인해야 한다.
+     * (gpt-5.4-mini는 이 작업에서 0이지만, 모델을 갈아타면 달라질 수 있다)
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CompletionDetails(@JsonProperty("reasoning_tokens") Integer reasoningTokens) {
     }
 }

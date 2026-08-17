@@ -38,7 +38,7 @@ class OpenAiReportGeneratorTest {
 
     private static final String BASE_URL = "https://api.openai.com/v1";
     private static final String CHAT = BASE_URL + "/chat/completions";
-    private static final String MODEL = "gpt-4o-mini";
+    private static final String MODEL = "gpt-5.4-mini";
 
     private final ObjectMapper mapper = JsonMapper.builder().build();
 
@@ -75,7 +75,8 @@ class OpenAiReportGeneratorTest {
                 "choices", List.of(Map.of(
                         "message", Map.of("role", "assistant", "content", innerJson),
                         "finish_reason", "stop")),
-                "usage", Map.of("prompt_tokens", 588, "completion_tokens", 243, "total_tokens", 831)));
+                "usage", Map.of("prompt_tokens", 588, "completion_tokens", 243, "total_tokens", 831,
+                        "completion_tokens_details", Map.of("reasoning_tokens", 0))));
     }
 
     @Test

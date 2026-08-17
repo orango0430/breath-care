@@ -59,7 +59,7 @@ openai:
   # 절대 커밋하지 않는다. 동아리 조직(LikeLionDGU) 키라 다른 팀과 공유한다.
   # 속도 제한과 크레딧이 조직 단위로 묶이므로 우리 호출은 캐시·쿨다운으로 최소한만 나간다.
   api-key: ${OPENAI_API_KEY:}
-  model: ${OPENAI_MODEL:gpt-4o-mini}
+  model: ${OPENAI_MODEL:gpt-5.4-mini}
 
 logging:
   level:
