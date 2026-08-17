@@ -50,3 +50,12 @@ firebase-service-account.json
 **/*-firebase-adminsdk-*.json
 google-services.json
 
+### Flutter ###
+.dart_tool/
+.pub-cache/
+.pub/
+frontend/.dart_tool/
+frontend/.pub/
+frontend/build/
+
+

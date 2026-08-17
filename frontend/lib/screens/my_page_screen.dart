@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
+import 'login_screen.dart';
 
 class MyPageScreen extends StatelessWidget {
   const MyPageScreen({super.key});
@@ -48,44 +49,62 @@ class MyPageScreen extends StatelessWidget {
               ),
               const SizedBox(height: 28),
 
-              // User Profile Section (GUEST Avatar & GUEST Text)
-              Row(
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: AppColors.slateDarkGray.withAlpha(150),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.slateDarkGray,
-                        width: 1,
-                      ),
+              // User Profile Section (GUEST Avatar & GUEST Text -> Tap opens LoginScreen)
+              GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(),
                     ),
-                    child: const Icon(
-                      Icons.person_rounded,
-                      color: AppColors.lightGray,
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'GUEST',
-                        style: TextStyle(
-                          fontFamily: AppFonts.pretendard,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.white,
+                  );
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppColors.slateDarkGray.withAlpha(150),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.slateDarkGray,
+                          width: 1,
                         ),
                       ),
-                      SizedBox(height: 4),
-                      // Email left blank as requested
-                    ],
-                  ),
-                ],
+                      child: const Icon(
+                        Icons.person_rounded,
+                        color: AppColors.lightGray,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'GUEST',
+                          style: TextStyle(
+                            fontFamily: AppFonts.pretendard,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.white,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          '로그인 / 회원가입하기 >',
+                          style: TextStyle(
+                            fontFamily: AppFonts.pretendard,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.lightMint,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 32),
 

@@ -1,33 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
+import '../widgets/bpace_logo.dart';
 import 'breathing_exercise_screen.dart';
+import 'my_page_screen.dart';
 
-/// Breathing Item Model
-class BreathExerciseItem {
+/// Ritual Item Model for Carousel
+class RitualCardItem {
   final String id;
   final String title;
-  final String durationAndDifficulty;
   final String description;
-  final String category; // '전체', '긴장 완화', '집중 향상', '수면 준비'
-  final Color boxColor;
-  final bool isRecommended;
-  final String? badgeText;
+  final String category;
+  final String imagePath;
+  final bool isBookmarked;
 
-  const BreathExerciseItem({
+  const RitualCardItem({
     required this.id,
     required this.title,
-    required this.durationAndDifficulty,
     required this.description,
     required this.category,
-    required this.boxColor,
-    this.isRecommended = false,
-    this.badgeText,
+    required this.imagePath,
+    this.isBookmarked = true,
   });
 }
 
-/// Recommended Breathing Screen (추천 호흡 화면 - 2번째 이미지)
+/// Recommended Breathing Screen (새로운 추천 Ritual 호흡 메인 화면)
 class RecommendedBreathingScreen extends StatefulWidget {
   const RecommendedBreathingScreen({super.key});
 
@@ -38,73 +37,132 @@ class RecommendedBreathingScreen extends StatefulWidget {
 
 class _RecommendedBreathingScreenState
     extends State<RecommendedBreathingScreen> {
-  // Selected category filter chip ('전체', '긴장 완화', '집중 향상', '수면 준비')
-  String selectedCategory = '전체';
+  final TextEditingController _searchController = TextEditingController();
+  final PageController _pageController = PageController(viewportFraction: 0.76);
 
-  final List<String> categories = const [
-    '전체',
-    '긴장 완화',
-    '집중 향상',
-    '수면 준비',
-  ];
+  int _selectedCategoryIndex = 0;
+  final List<String> _categories = ['발표', '시험', '면접'];
 
-  final List<BreathExerciseItem> items = const [
-    BreathExerciseItem(
+  final List<RitualCardItem> _ritualItems = const [
+    RitualCardItem(
       id: '1',
-      title: '긴장 완화 호흡',
-      durationAndDifficulty: '5분 · 중간 강도',
-      description: '불안한 긴장을 낮추고 마음을 안정시켜요',
-      category: '긴장 완화',
-      boxColor: Color(0xFF2E453E),
-      isRecommended: true,
-      badgeText: '추천',
-    ),
-    BreathExerciseItem(
-      id: '2',
-      title: '복식 호흡',
-      durationAndDifficulty: '3분 · 쉬움',
-      description: '복부 중심으로 깊게 호흡하여 안정감을 줘요',
-      category: '긴장 완화',
-      boxColor: Color(0xFF344265),
-      isRecommended: false,
-    ),
-    BreathExerciseItem(
-      id: '3',
       title: '4-7-8 호흡',
-      durationAndDifficulty: '4분 · 중간 강도',
-      description: '불안과 스트레스를 완화해 도움을 줘요',
-      category: '긴장 완화',
-      boxColor: Color(0xFF47385E),
-      isRecommended: false,
+      description: '긴장을 천천히 가라앉히는 호흡',
+      category: '발표',
+      imagePath: 'assets/images/bg_breath_478.png',
+      isBookmarked: true,
     ),
-    BreathExerciseItem(
+    RitualCardItem(
+      id: '2',
+      title: '4-4-4-4 박스 호흡',
+      description: '몰입 및 집중력 극대화 호흡',
+      category: '시험',
+      imagePath: 'assets/images/bg_breath_box_4444.png',
+      isBookmarked: true,
+    ),
+    RitualCardItem(
+      id: '3',
+      title: '5.5-5.5 공진 호흡',
+      description: '자율신경 균형 및 HRV 수치 극대화',
+      category: '면접',
+      imagePath: 'assets/images/bg_breath_resonance.png',
+      isBookmarked: true,
+    ),
+    RitualCardItem(
       id: '4',
-      title: '박스 호흡',
-      durationAndDifficulty: '4분 · 중간 강도',
-      description: '깊은 집중과 감정 조절에 효과적이에요',
-      category: '집중 향상',
-      boxColor: Color(0xFF42382F),
-      isRecommended: false,
+      title: '생리학적 한숨',
+      description: '급속 CO₂ 배출 및 즉각적 심박수 강하',
+      category: '발표',
+      imagePath: 'assets/images/bg_breath_sigh.png',
+      isBookmarked: false,
     ),
-    BreathExerciseItem(
+    RitualCardItem(
       id: '5',
-      title: '수면 준비 호흡',
-      durationAndDifficulty: '7분 · 쉬움',
-      description: '잠들기 전 긴장을 풀고 숙면을 도와줘요',
-      category: '수면 준비',
-      boxColor: Color(0xFF28403D),
-      isRecommended: false,
+      title: '4-6 릴랙스 호흡',
+      description: '초보자 맞춤형 마일드 이완 및 안정을 도움',
+      category: '면접',
+      imagePath: 'assets/images/bg_breath_46_relax.png',
+      isBookmarked: false,
+    ),
+    RitualCardItem(
+      id: '6',
+      title: '4-2-4-2 세미 박스 호흡',
+      description: '저부담 인지 조절 및 일상 루틴 유지',
+      category: '시험',
+      imagePath: 'assets/images/bg_breath_semi_box.png',
+      isBookmarked: false,
+    ),
+    RitualCardItem(
+      id: '7',
+      title: '2-1-4-1 횡격막 복식호흡',
+      description: '횡격막 가동 및 복부 내장기 긴장 해소',
+      category: '발표',
+      imagePath: 'assets/images/bg_breath_diaphragmatic.png',
+      isBookmarked: false,
+    ),
+    RitualCardItem(
+      id: '8',
+      title: '4-1-2-1 각성 호흡',
+      description: '혈류 산소 순환 촉진 및 두뇌 에너징',
+      category: '시험',
+      imagePath: 'assets/images/bg_breath_awakening.png',
+      isBookmarked: false,
     ),
   ];
 
-  List<BreathExerciseItem> get filteredItems {
-    if (selectedCategory == '전체') {
-      return items;
-    }
-    return items
-        .where((item) =>
-            item.category == selectedCategory || item.isRecommended)
-        .toList();
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _addCustomCategory() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final categoryController = TextEditingController();
+        return AlertDialog(
+          backgroundColor: AppColors.darkCharcoal,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            '새 카테고리 추가',
+            style: TextStyle(
+              fontFamily: AppFonts.pretendard,
+              fontSize: 16,
+              color: AppColors.white,
+            ),
+          ),
+          content: TextField(
+            controller: categoryController,
+            style: const TextStyle(color: AppColors.white),
+            decoration: const InputDecoration(
+              hintText: '카테고리명 입력 (예: 면접)',
+              hintStyle: TextStyle(color: AppColors.slateGray),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소', style: TextStyle(color: AppColors.slateGray)),
+            ),
+            TextButton(
+              onPressed: () {
+                final text = categoryController.text.trim();
+                if (text.isNotEmpty) {
+                  setState(() {
+                    _categories.add(text);
+                    _selectedCategoryIndex = _categories.length - 1;
+                  });
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('추가', style: TextStyle(color: AppColors.lightMint)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -114,32 +172,63 @@ class _RecommendedBreathingScreenState
       body: SafeArea(
         child: ResponsiveContainer(
           maxWidth: 600,
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 12),
-              // App Bar Header: Back Arrow + "호흡하기"
+              // 1. Top App Header (BPACE Logo, Bell Icon, Profile Avatar)
               _buildHeader(context),
-              const SizedBox(height: 16),
-
-              // Filter Tag Chips Bar (Horizontal Scroll)
-              _buildFilterChips(),
               const SizedBox(height: 20),
 
-              // Breathing Exercise List
+              // 2. Main Title: Time For \n Your Ritual
+              Text(
+                'Time For\nYour Ritual',
+                style: GoogleFonts.outfit(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.white,
+                  height: 1.15,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 3. Search Bar Field Box
+              _buildSearchBar(),
+              const SizedBox(height: 24),
+
+              // 4. Section Header: 추천 Ritual
+              const Text(
+                '추천 Ritual',
+                style: TextStyle(
+                  fontFamily: AppFonts.pretendard,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.white,
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // 5. Category Chips Row (발표, 시험, 면접, +)
+              _buildCategoryChips(),
+              const SizedBox(height: 20),
+
+              // 6. Featured Carousel Cards PageView
               Expanded(
-                child: ListView.separated(
+                child: PageView.builder(
+                  controller: _pageController,
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 24),
-                  itemCount: filteredItems.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 12),
+                  itemCount: _ritualItems.length,
                   itemBuilder: (context, index) {
-                    final item = filteredItems[index];
-                    return _buildBreathCard(item);
+                    final item = _ritualItems[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                      child: _buildRitualCard(item),
+                    );
                   },
                 ),
               ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -147,247 +236,322 @@ class _RecommendedBreathingScreenState
     );
   }
 
-  /// App Bar Header with Back Arrow and Title
+  /// 1. Top Header Bar (With GUEST pictogram avatar as requested)
   Widget _buildHeader(BuildContext context) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(
-            Icons.arrow_back_rounded,
-            color: AppColors.white,
-            size: 24,
-          ),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-        ),
-        const SizedBox(width: 14),
-        const Text(
-          '호흡하기',
-          style: TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: AppColors.white,
-          ),
+        const BpaceLogo(height: 24, fontSize: 20, iconSize: 22),
+        Row(
+          children: [
+            IconButton(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('알림함으로 이동합니다.'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+              icon: const Icon(
+                Icons.notifications_none_rounded,
+                color: AppColors.white,
+                size: 24,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 14),
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const MyPageScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.slateDarkGray.withAlpha(150),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.slateDarkGray,
+                    width: 1,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.person_rounded,
+                  color: AppColors.lightGray,
+                  size: 22,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  /// Horizontal Scrollable Filter Chip Bar
-  Widget _buildFilterChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: categories.map((category) {
-          final isSelected = selectedCategory == category;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: InkWell(
-              onTap: () {
-                setState(() {
-                  selectedCategory = category;
-                });
-              },
-              borderRadius: BorderRadius.circular(20),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppColors.lightMint
-                      : AppColors.darkCharcoal,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.lightMint
-                        : AppColors.slateDarkGray.withAlpha(80),
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  category,
-                  style: TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 13.5,
-                    fontWeight:
-                        isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? AppColors.darkBg : AppColors.lightGray,
-                  ),
-                ),
-              ),
+  /// 3. Search Bar Container Field
+  Widget _buildSearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF252628),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: TextField(
+        controller: _searchController,
+        style: const TextStyle(
+          fontFamily: AppFonts.pretendard,
+          fontSize: 15,
+          color: AppColors.white,
+        ),
+        decoration: const InputDecoration(
+          hintText: 'Search',
+          hintStyle: TextStyle(
+            fontFamily: AppFonts.pretendard,
+            fontSize: 15,
+            color: AppColors.slateGray,
+          ),
+          prefixIcon: Padding(
+            padding: EdgeInsets.only(left: 16, right: 12),
+            child: Icon(
+              Icons.search_rounded,
+              color: AppColors.slateGray,
+              size: 22,
             ),
-          );
-        }).toList(),
+          ),
+          prefixIconConstraints: BoxConstraints(minWidth: 50),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(vertical: 14),
+        ),
       ),
     );
   }
 
-  /// Individual Breathing Exercise Card Component matching Image 2
-  Widget _buildBreathCard(BreathExerciseItem item) {
-    return InkWell(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => BreathingExerciseScreen(
-              title: item.title,
-            ),
-          ),
-        );
-      },
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.darkCharcoal,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: item.isRecommended
-                ? AppColors.slateDarkGray.withAlpha(120)
-                : AppColors.slateDarkGray.withAlpha(50),
-            width: item.isRecommended ? 1.0 : 0.8,
-          ),
-        ),
-        child: Stack(
-          children: [
-            Row(
-              children: [
-                // Left Square Thumbnail Container
-                Container(
-                  width: 52,
-                  height: 52,
+  /// 5. Category Chips Row (발표, 시험, 면접, +)
+  Widget _buildCategoryChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: [
+          ...List.generate(_categories.length, (index) {
+            final isSelected = _selectedCategoryIndex == index;
+            return Padding(
+              padding: const EdgeInsets.only(right: 10.0),
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedCategoryIndex = index;
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 10),
                   decoration: BoxDecoration(
-                    color: item.boxColor,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                const SizedBox(width: 14),
-
-                // Middle Information Block
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        style: const TextStyle(
-                          fontFamily: AppFonts.pretendard,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        item.durationAndDifficulty,
-                        style: const TextStyle(
-                          fontFamily: AppFonts.pretendard,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.lightGray,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        item.description,
-                        style: TextStyle(
-                          fontFamily: AppFonts.pretendard,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.lightGray.withAlpha(200),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-
-                // Right Action Icon Button (Checkmark for Recommended, Play Button for others)
-                if (item.isRecommended)
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => BreathingExerciseScreen(
-                            title: item.title,
-                          ),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: const BoxDecoration(
-                        color: AppColors.lightMint,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check_rounded,
-                        color: AppColors.darkBg,
-                        size: 20,
-                      ),
-                    ),
-                  )
-                else
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => BreathingExerciseScreen(
-                            title: item.title,
-                          ),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: AppColors.slateDarkGray.withAlpha(150),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow_rounded,
-                        color: AppColors.lightGray,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-
-            // Top-Right "추천" Badge if applicable
-            if (item.badgeText != null)
-              Positioned(
-                top: 0,
-                right: 48, // Positioned to the left of the checkmark button
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDCEBFE), // Light soft blue badge
-                    borderRadius: BorderRadius.circular(10),
+                    color: isSelected ? AppColors.white : const Color(0xFF252628),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    item.badgeText!,
-                    style: const TextStyle(
+                    _categories[index],
+                    style: TextStyle(
                       fontFamily: AppFonts.pretendard,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E2F4D),
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? AppColors.darkBg : AppColors.lightGray,
                     ),
                   ),
                 ),
               ),
+            );
+          }),
+
+          // Plus (+) Add Category Button
+          GestureDetector(
+            onTap: _addCustomCategory,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF252628),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.add_rounded,
+                color: AppColors.lightGray,
+                size: 20,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 6. Featured Ritual Card Component matching screenshot
+  Widget _buildRitualCard(RitualCardItem item) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          color: const Color(0xFF2B2D32),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Background Image / Gradient
+            Image.asset(
+              item.imagePath,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF384656), Color(0xFF252C36)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            // Dark Frosted Gradient Overlay
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.black.withAlpha(30),
+                    Colors.black.withAlpha(140),
+                    Colors.black.withAlpha(220),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+
+            // Bookmark Ribbon Icon on Top Right
+            Positioned(
+              top: 18,
+              right: 18,
+              child: Icon(
+                item.isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                color: AppColors.white,
+                size: 26,
+              ),
+            ),
+
+            // Bottom Content Information & Action Buttons
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 24,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Title: 4-7-8 호흡
+                  Text(
+                    item.title,
+                    style: const TextStyle(
+                      fontFamily: AppFonts.pretendard,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.white,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Subtitle Description: 긴장을 천천히 가라앉히는 호흡
+                  Text(
+                    item.description,
+                    style: TextStyle(
+                      fontFamily: AppFonts.pretendard,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.white.withAlpha(210),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Bottom Action Pill Bar: [ Glassmorphic 시작하기 ]   (->)
+                  Row(
+                    children: [
+                      // Translucent Glassmorphism Button: 시작하기
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => BreathingExerciseScreen(
+                                  title: item.title,
+                                  bgImagePath: item.imagePath,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(50),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: Colors.white.withAlpha(60),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                '시작하기',
+                                style: TextStyle(
+                                  fontFamily: AppFonts.pretendard,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // White Circle Right Arrow Button (->)
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => BreathingExerciseScreen(
+                                title: item.title,
+                                bgImagePath: item.imagePath,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: const BoxDecoration(
+                            color: AppColors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.arrow_forward_rounded,
+                            color: AppColors.darkBg,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

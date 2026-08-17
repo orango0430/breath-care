@@ -10,17 +10,11 @@ class OnboardingItem {
   final String imagePath;
   final String title;
   final String description;
-  final String buttonText;
-  final Color buttonColor;
-  final Color buttonTextColor;
 
   const OnboardingItem({
     required this.imagePath,
     required this.title,
     required this.description,
-    required this.buttonText,
-    required this.buttonColor,
-    required this.buttonTextColor,
   });
 }
 
@@ -40,25 +34,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       imagePath: 'assets/images/onboarding_1.png',
       title: 'Your Breath,\nYour Pace',
       description: '모두에게 같은 호흡법이 맞는 것은 아니니까.\n내 몸의 반응에 맞는 호흡 리듬을 찾아보세요.',
-      buttonText: '다음',
-      buttonColor: Colors.white,
-      buttonTextColor: Colors.black,
     ),
     OnboardingItem(
       imagePath: 'assets/images/onboarding_2.png',
       title: 'Read\nYour Body',
       description: '스마트폰으로 현재 상태를 확인하고,\n호흡 전후의 반응을 바탕으로 나에게 맞는 페이스를 찾아요.',
-      buttonText: '다음',
-      buttonColor: Colors.white,
-      buttonTextColor: Colors.black,
     ),
     OnboardingItem(
       imagePath: 'assets/images/onboarding_3.png',
       title: 'Breathe Ahead',
       description: '중요한 일정에 맞춰,\n나에게 잘 맞았던 호흡을 필요한 순간에 준비해요.',
-      buttonText: '시작하기',
-      buttonColor: AppColors.lightMint,
-      buttonTextColor: AppColors.darkBg,
     ),
   ];
 
@@ -68,6 +53,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
+  void _navigateToNext() {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const PermissionRequestScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 500),
+      ),
+    );
+  }
+
   void _onNextPressed() {
     if (_currentPage < _items.length - 1) {
       _pageController.nextPage(
@@ -75,17 +73,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              const PermissionRequestScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
+      _navigateToNext();
     }
+  }
+
+  void _onSkipPressed() {
+    _navigateToNext();
   }
 
   @override
@@ -107,14 +100,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             itemCount: _items.length,
             itemBuilder: (context, index) {
               final isSecondSlide = index == 1;
+              final isThirdSlide = index == 2;
               if (isSecondSlide) {
                 return Transform.scale(
-                  scale: 1.45,
-                  alignment: const Alignment(0.0, -0.7),
+                  scale: 1.22,
+                  alignment: const Alignment(0.2, -0.2),
                   child: Image.asset(
                     _items[index].imagePath,
                     fit: BoxFit.cover,
-                    alignment: const Alignment(0.0, -0.7),
+                    alignment: Alignment.center,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(color: AppColors.darkBg);
+                    },
+                  ),
+                );
+              }
+              if (isThirdSlide) {
+                return Transform.scale(
+                  scale: 1.12,
+                  alignment: const Alignment(-0.65, -0.25),
+                  child: Image.asset(
+                    _items[index].imagePath,
+                    fit: BoxFit.cover,
+                    alignment: const Alignment(-0.65, -0.25),
                     errorBuilder: (context, error, stackTrace) {
                       return Container(color: AppColors.darkBg);
                     },
@@ -124,6 +132,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               return Image.asset(
                 _items[index].imagePath,
                 fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(color: AppColors.darkBg);
                 },
@@ -140,9 +149,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withAlpha(120),
-                      Colors.black.withAlpha(40),
-                      Colors.black.withAlpha(180),
+                      Colors.black.withAlpha(140),
+                      Colors.black.withAlpha(50),
+                      Colors.black.withAlpha(200),
                     ],
                     stops: const [0.0, 0.45, 1.0],
                   ),
@@ -151,34 +160,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
 
-          // 3. Foreground UI Layer matching exact Figma position
+          // 3. Foreground UI Layer matching exact design screenshot
           SafeArea(
             child: ResponsiveContainer(
               maxWidth: 600,
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 16.0),
               child: Column(
                 children: [
-                  const SizedBox(height: 54),
-                  // Top Logo Header: BPACE
+                  const SizedBox(height: 95),
+                  // Top Logo Header: BPACE (Enlarged size)
                   const BpaceLogo(
-                    height: 36,
+                    height: 52,
+                    fontSize: 30,
+                    iconSize: 42,
                     useFullImage: true,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Text(
                     'Time For Your Ritual',
                     style: GoogleFonts.outfit(
-                      fontSize: 13,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w400,
                       color: AppColors.white,
-                      letterSpacing: 0.5,
+                      letterSpacing: 2.2,
                     ),
                   ),
 
-                  // Flex Spacer pushing title to lower screen position matching reference image
-                  const Spacer(flex: 7),
+                  // Flex Spacer pushing title down further to match lower positioning
+                  const Spacer(flex: 14),
 
-                  // Main Title (Your Breath, Your Pace / Read Your Body / Breathe Ahead)
+                  // Main Title (Your Breath, Your Pace)
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     child: Text(
@@ -214,7 +225,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 36),
 
                   // 3-dot Page Indicator
                   Row(
@@ -236,32 +247,84 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     }),
                   ),
 
-                  const SizedBox(height: 28),
+                  const Spacer(flex: 1),
 
-                  // Bottom Action Button ("다음" / "시작하기")
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _onNextPressed,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: currentItem.buttonColor,
-                        foregroundColor: currentItem.buttonTextColor,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                      ),
-                      child: Text(
-                        currentItem.buttonText,
-                        style: TextStyle(
-                          fontFamily: AppFonts.pretendard,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: currentItem.buttonTextColor,
-                        ),
-                      ),
-                    ),
+                  // Bottom Navigation Controls (Onboarding 1 & 2: Skip + Arrow, Onboarding 3: Light Mint 시작하기 Button)
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: _currentPage < _items.length - 1
+                        ? Stack(
+                            key: const ValueKey('onboarding_nav_arrows'),
+                            alignment: Alignment.center,
+                            children: [
+                              // Centered Skip Button
+                              GestureDetector(
+                                onTap: _onSkipPressed,
+                                behavior: HitTestBehavior.opaque,
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+                                  child: Text(
+                                    '건너뛰기',
+                                    style: TextStyle(
+                                      fontFamily: AppFonts.pretendard,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                      color: AppColors.lightGray,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              // Right-aligned Circle Arrow Button
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: GestureDetector(
+                                  onTap: _onNextPressed,
+                                  child: Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.arrow_forward_rounded,
+                                        color: Colors.black,
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : SizedBox(
+                            key: const ValueKey('onboarding_start_button'),
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: _navigateToNext,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.lightMint,
+                                foregroundColor: AppColors.darkBg,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                              ),
+                              child: const Text(
+                                '시작하기',
+                                style: TextStyle(
+                                  fontFamily: AppFonts.pretendard,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.darkBg,
+                                ),
+                              ),
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -273,3 +336,4 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 }
+
