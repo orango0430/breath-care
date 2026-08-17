@@ -23,9 +23,20 @@ public class StubSignalProcessor implements SignalProcessor {
     private static final double STUB_HR = 72.0;
     private static final double STUB_HRV = 35.0;
 
+    /**
+     * 경고는 기동할 때 한 번만 남긴다.
+     *
+     * <p>요청마다 WARN을 찍던 걸 옮긴 것이다. 비회원 측정은 인증 없이 열려 있어서
+     * 행사처럼 사람이 몰리면 초당 수천 줄이 쌓인다. 부하 테스트에서 실제로 확인했다.
+     * 경고 자체는 남겨야 한다 — 스텁인 걸 모르고 배포하는 게 더 위험하다.
+     */
+    public StubSignalProcessor() {
+        log.warn("신호처리가 아직 스텁입니다. 심박수·HRV는 고정값으로 나갑니다.");
+    }
+
     @Override
     public SignalResult process(double[] samples, int fps) {
-        log.warn("신호처리가 아직 스텁입니다. 고정값을 반환합니다. (samples={}, fps={})", samples.length, fps);
+        log.debug("스텁 신호처리 (samples={}, fps={})", samples.length, fps);
 
         if (samples.length < (long) fps * MIN_DURATION_SEC) {
             return SignalResult.poor();
