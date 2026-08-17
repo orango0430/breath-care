@@ -129,7 +129,8 @@ public class OpenAiReportGenerator implements ReportGenerator {
         if (usage == null) {
             return;
         }
-        log.info("OpenAI usage: prompt={} completion={} total={}",
-                usage.promptTokens(), usage.completionTokens(), usage.totalTokens());
+        log.info("OpenAI usage: prompt={} completion={} reasoning={} total={}",
+                usage.promptTokens(), usage.completionTokens(),
+                usage.reasoningTokens(), usage.totalTokens());
     }
 }
