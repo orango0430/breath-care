@@ -4,6 +4,7 @@ import org.exaple.breath_care.global.exception.BusinessException;
 import org.exaple.breath_care.global.exception.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -20,7 +21,7 @@ import java.util.List;
  * 사용자가 어느 쪽을 믿어야 할지 모르게 되기 때문이다.
  */
 @Component
-@ConditionalOnProperty(name = "gemini.enabled", havingValue = "true")
+@ConditionalOnProperty(name = ReportProvider.KEY, havingValue = ReportProvider.GEMINI)
 public class GeminiReportGenerator implements ReportGenerator {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiReportGenerator.class);
@@ -31,12 +32,16 @@ public class GeminiReportGenerator implements ReportGenerator {
     private final RestClient geminiRestClient;
     private final ObjectMapper objectMapper;
     private final GeminiProperties properties;
+    private final ReportProperties reportProperties;
 
-    public GeminiReportGenerator(RestClient geminiRestClient, ObjectMapper objectMapper,
-                                 GeminiProperties properties) {
+    public GeminiReportGenerator(@Qualifier("geminiRestClient") RestClient geminiRestClient,
+                                 ObjectMapper objectMapper,
+                                 GeminiProperties properties,
+                                 ReportProperties reportProperties) {
         this.geminiRestClient = geminiRestClient;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.reportProperties = reportProperties;
     }
 
     @Override
@@ -65,7 +70,7 @@ public class GeminiReportGenerator implements ReportGenerator {
                 GeminiApi.Content.of(ReportPrompt.SYSTEM_INSTRUCTION),
                 new GeminiApi.GenerationConfig(
                         TEMPERATURE,
-                        properties.maxOutputTokens(),
+                        reportProperties.maxOutputTokens(),
                         JSON_MIME,
                         ReportPrompt.responseSchema(),
                         new GeminiApi.ThinkingConfig(properties.thinkingBudget())));
