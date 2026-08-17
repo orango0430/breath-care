@@ -43,17 +43,17 @@ class CalendarPushServiceTest {
         userId = userRepository.save(User.create("push@test.com", "{noop}pw", "tester")).getId();
     }
 
-    /** 2026-09-15 14:00 KST 시험. 전날 알림 = 09-14 21:00 KST, 직전 알림 = 09-15 13:30 KST */
+    /** 2026-09-15 14:00 KST 시험. 전날 알림 = 09-14 22:00 KST, 직전 알림 = 09-15 13:30 KST */
     private CalendarEvent exam() {
         return calendarEventRepository.save(
-                CalendarEvent.create(userId, "중간고사", EventType.EXAM, Instant.parse("2026-09-15T05:00:00Z")));
+                CalendarEvent.create(userId, "중간고사", EventType.EXAM, null, Instant.parse("2026-09-15T05:00:00Z")));
     }
 
-    private static final Instant DAY_BEFORE_TIME = Instant.parse("2026-09-14T12:00:00Z"); // 09-14 21:00 KST
+    private static final Instant DAY_BEFORE_TIME = Instant.parse("2026-09-14T13:00:00Z"); // 09-14 22:00 KST
     private static final Instant BEFORE_30M_TIME = Instant.parse("2026-09-15T04:30:00Z"); // 09-15 13:30 KST
 
     @Test
-    @DisplayName("전날 21시가 되면 DAY_BEFORE 알림을 보낸다")
+    @DisplayName("전날 22시가 되면 DAY_BEFORE 알림을 보낸다")
     void sendsDayBefore() {
         exam();
 
@@ -131,7 +131,7 @@ class CalendarPushServiceTest {
     void doesNotSendDuringQuietHours() {
         // 09-15 02:00 KST 일정 → 직전 알림은 01:30 KST
         calendarEventRepository.save(
-                CalendarEvent.create(userId, "새벽 일정", EventType.ETC, Instant.parse("2026-09-14T17:00:00Z")));
+                CalendarEvent.create(userId, "새벽 일정", EventType.ETC, null, Instant.parse("2026-09-14T17:00:00Z")));
 
         int sent = calendarPushService.dispatchDue(Instant.parse("2026-09-14T16:30:00Z"));
 
@@ -143,7 +143,7 @@ class CalendarPushServiceTest {
     @DisplayName("일정 종류가 없으면 '일정'으로 문구를 만든다")
     void handlesNullEventType() {
         calendarEventRepository.save(
-                CalendarEvent.create(userId, "제목만 있는 일정", null, Instant.parse("2026-09-15T05:00:00Z")));
+                CalendarEvent.create(userId, "제목만 있는 일정", null, null, Instant.parse("2026-09-15T05:00:00Z")));
 
         calendarPushService.dispatchDue(DAY_BEFORE_TIME);
 

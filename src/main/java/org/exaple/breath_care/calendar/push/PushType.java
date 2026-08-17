@@ -32,8 +32,13 @@ public enum PushType {
         }
     };
 
-    /** "전날 밤"의 기준 시각. 24시간 전이 아니라 고정 시각이어야 새벽 일정에도 밤에 알림이 간다. */
-    private static final int DAY_BEFORE_HOUR = 21;
+    /**
+     * "전날 밤"의 기준 시각. 24시간 전이 아니라 고정 시각이어야 새벽 일정에도 밤에 알림이 간다.
+     *
+     * <p>이 값을 옮길 때는 {@code CalendarPushService.QUIET_FROM}을 같이 봐야 한다.
+     * 조용시간 안으로 들어가면 알림이 <b>조용히 한 건도 안 나간다.</b>
+     */
+    private static final int DAY_BEFORE_HOUR = 22;
 
     public abstract Instant scheduledAt(Instant startAt, ZoneId zone);
 }
