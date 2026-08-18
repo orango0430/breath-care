@@ -38,6 +38,9 @@ out/
 
 ### .env ###
 .env
+# .env.prod처럼 접미사가 붙은 것도 전부 막는다. 예제 파일만 예외다.
+.env.*
+!.env.prod.example
 
 ### JVM 크래시 덤프 ###
 hs_err_pid*.log
