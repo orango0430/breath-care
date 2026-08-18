@@ -24,18 +24,35 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  final RegExp _emailRegExp = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.coralRed,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _onLoginPressed() {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('아이디 (이메일)와 비밀번호를 입력해 주세요.'),
-          backgroundColor: AppColors.coralRed,
-          duration: Duration(seconds: 2),
-        ),
-      );
+    if (email.isEmpty) {
+      _showError('아이디(이메일)를 입력해 주세요.');
+      return;
+    }
+
+    if (!_emailRegExp.hasMatch(email)) {
+      _showError('유효한 이메일 형식을 입력해 주세요.');
+      return;
+    }
+
+    if (password.isEmpty) {
+      _showError('비밀번호를 입력해 주세요.');
       return;
     }
 
