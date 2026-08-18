@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "830896594990",
+    "project_id": "breath-care-9c3e5",
+    "storage_bucket": "breath-care-9c3e5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:830896594990:android:5c9024497b2d649369ffbf",
+        "android_client_info": {
+          "package_name": "com.example.breath_care"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "830896594990-sfus9c1ag7dh2hc51t35omud1m2dul1n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.breath_care",
+            "certificate_hash": "425bf9e86b94659351ad709e7a410cd234b5f8b4"
+          }
+        },
+        {
+          "client_id": "830896594990-cgu36rgv13olqegmgf5496q52pmrkqrs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBnMqbMU0kSUyCyih-v9cInpFTDEVXODok"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "830896594990-cgu36rgv13olqegmgf5496q52pmrkqrs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

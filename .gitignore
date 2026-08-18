@@ -38,6 +38,9 @@ out/
 
 ### .env ###
 .env
+# .env.prod처럼 접미사가 붙은 것도 전부 막는다. 예제 파일만 예외다.
+.env.*
+!.env.prod.example
 
 ### JVM 크래시 덤프 ###
 hs_err_pid*.log
@@ -48,7 +51,8 @@ firebase-service-account.json
 **/firebase-service-account*.json
 *-firebase-adminsdk-*.json
 **/*-firebase-adminsdk-*.json
-google-services.json
+# google-services.json은 여기 없다. 비밀이 아니라 APK 안에 그대로 들어가는 클라이언트 설정이고,
+# 안의 키는 패키지명 + SHA-1 지문으로 잠겨 있다. 없으면 안드로이드 빌드가 실패하므로 커밋한다.
 
 ### Flutter ###
 .dart_tool/

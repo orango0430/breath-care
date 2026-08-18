@@ -55,8 +55,10 @@ key.properties
 # Secrets / Config / Environment
 .env
 .env.*
-google-services.json
-GoogleService-Info.plist
+# google-services.json / GoogleService-Info.plist는 비밀이 아니다. APK·IPA 안에 그대로 들어가는
+# 클라이언트 설정이고, 안의 키는 패키지명 + SHA-1 지문으로 잠겨 있다.
+# 빼 두면 팀원이 받을 방법이 없어서 빌드가 실패하므로 커밋한다.
+# (진짜 비밀은 서버에만 두는 firebase-service-account.json 쪽이다)
 
 # Symbolication & Obfuscation related
 app.*.symbols
