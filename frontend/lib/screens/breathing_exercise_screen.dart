@@ -7,7 +7,7 @@ import '../utils/responsive.dart';
 import '../utils/breathing_routine_model.dart';
 import 'breathing_completion_screen.dart';
 
-/// Guided Breathing Exercise Screen: 100% Exact Original Ball & Wave Animation Engine (from Image 1 git history) + Image 2 UI Layout
+/// Guided Breathing Exercise Screen with 1-Minute Scientific Adaptive Entrainment Engine (카메라 측정 템포 -> 1분간 4-7-8 점진 유도)
 class BreathingExerciseScreen extends StatefulWidget {
   final String title;
   final int totalCycles;
@@ -15,7 +15,6 @@ class BreathingExerciseScreen extends StatefulWidget {
   final BreathingRoutineModel? routineModel;
   final double initialInhaleSec;
   final double initialExhaleSec;
-
   final String bgImagePath;
 
   const BreathingExerciseScreen({
@@ -25,8 +24,8 @@ class BreathingExerciseScreen extends StatefulWidget {
     this.totalCycles = 6,
     this.targetDurationMinutes = 5,
     this.routineModel,
-    this.initialInhaleSec = 2.2,
-    this.initialExhaleSec = 2.2,
+    this.initialInhaleSec = 2.0, // Measured initial inhale tempo
+    this.initialExhaleSec = 2.0, // Measured initial exhale tempo
   });
 
   @override
@@ -39,22 +38,36 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   late AnimationController _animController;
   Timer? _durationTimer;
 
-  int elapsedSeconds = 4; // Default sample (00:04)
+  int elapsedSeconds = 0; // Starts from 00:00
   int currentCycle = 1;
   bool isPlaying = true;
   int averageHrvBpmChange = -8;
+
+  // 1-Minute Scientific Transition Duration (60 Seconds)
+  static const double _adaptiveRampSeconds = 60.0;
 
   @override
   void initState() {
     super.initState();
 
-    // Exact original 10-second repeating animation controller
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
-    )..repeat();
+      duration: Duration(milliseconds: (_currentCycleTotalSec * 1000).round()),
+    );
 
+    _runCycleAnimation();
     _startTimer();
+  }
+
+  /// Run continuous repeating cycle animation dynamically updating duration per cycle
+  void _runCycleAnimation() {
+    final cycleDurationMs = (_currentCycleTotalSec * 1000).round();
+    _animController.duration = Duration(milliseconds: cycleDurationMs);
+    _animController.forward(from: 0.0).then((_) {
+      if (mounted && isPlaying) {
+        _runCycleAnimation();
+      }
+    });
   }
 
   void _startTimer() {
@@ -64,7 +77,8 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
       if (isPlaying) {
         setState(() {
           elapsedSeconds++;
-          if (elapsedSeconds % 10 == 0 && currentCycle < widget.totalCycles) {
+          final cycleSec = _currentCycleTotalSec.round();
+          if (cycleSec > 0 && elapsedSeconds % cycleSec == 0 && currentCycle < widget.totalCycles) {
             currentCycle++;
           }
         });
@@ -91,7 +105,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     setState(() {
       isPlaying = !isPlaying;
       if (isPlaying) {
-        _animController.repeat();
+        _runCycleAnimation();
       } else {
         _animController.stop();
       }
@@ -105,7 +119,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
       isPlaying = true;
     });
     _animController.reset();
-    _animController.repeat();
+    _runCycleAnimation();
   }
 
   String get _formattedTime {
@@ -114,15 +128,58 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     return '$mins:$secs';
   }
 
-  /// Get current phase label for ball tag
+  /// 60-Second Linear Progress Ratio (0.0 at 0s -> 1.0 at 60s)
+  double get _adaptiveProgress {
+    return (elapsedSeconds / _adaptiveRampSeconds).clamp(0.0, 1.0);
+  }
+
+  /// Real-time Inhale Duration (Starts at initialInhaleSec e.g. 2.0s -> Ramps to 4.0s over 60s)
+  double get _currentInhaleSec {
+    const targetInhale = 4.0;
+    return widget.initialInhaleSec + (targetInhale - widget.initialInhaleSec) * _adaptiveProgress;
+  }
+
+  /// Real-time Hold Duration (Starts at 0.0s -> Ramps to 7.0s over 60s)
+  double get _currentHoldSec {
+    const targetHold = 7.0;
+    return 0.0 + (targetHold - 0.0) * _adaptiveProgress;
+  }
+
+  /// Real-time Exhale Duration (Starts at initialExhaleSec e.g. 2.0s -> Ramps to 8.0s over 60s)
+  double get _currentExhaleSec {
+    const targetExhale = 8.0;
+    return widget.initialExhaleSec + (targetExhale - widget.initialExhaleSec) * _adaptiveProgress;
+  }
+
+  /// Current Total Cycle Duration (Starts at ~4.0s -> Ramps to 19.0s)
+  double get _currentCycleTotalSec {
+    return _currentInhaleSec + _currentHoldSec + _currentExhaleSec;
+  }
+
+  /// Get current phase label matching 4-7-8 stages ("들숨", "참기", "날숨")
   String get _currentPhaseLabel {
     final val = _animController.value;
-    if (val < 0.38) {
-      return '들이마시기';
-    } else if (val < 0.62) {
-      return '멈추기';
+    final total = _currentCycleTotalSec;
+    if (total <= 0) return '들숨';
+
+    final rInhale = _currentInhaleSec / total;
+    final rHold = (_currentInhaleSec + _currentHoldSec) / total;
+
+    if (val < rInhale) {
+      return '들숨';
+    } else if (val < rHold) {
+      return '참기';
     } else {
-      return '내쉬기';
+      return '날숨';
+    }
+  }
+
+  /// Subtext Guide message changing dynamically after 60s transition
+  String get _guideSubtext {
+    if (elapsedSeconds < 60) {
+      return '회원님의 컨디션에 맞춰 1분간 조율 중이에요';
+    } else {
+      return '안정적인 4-7-8 호흡이 진행 중이에요';
     }
   }
 
@@ -140,7 +197,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Serene Frosted Background Image (matching Image 2)
+          // 1. Background Image
           Image.asset(
             widget.bgImagePath,
             fit: BoxFit.cover,
@@ -183,18 +240,22 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                   _buildHeader(context),
                   const SizedBox(height: 16),
 
-                  // Middle Animated Wave Canvas (100% Exact Original Ball Animation + Image 2 Stage Dotted Lines)
+                  // Middle Animated Wave Canvas (1-Minute Adaptive Entrainment Calibrated Wave)
                   Expanded(
                     child: Stack(
                       children: [
-                        // Vertical Stage Dotted Lines & Labels from Image 2 (4초 들이마시기 / 7초 멈추기 / 8초 내쉬기)
+                        // Vertical Stage Dotted Lines & Labels
                         Positioned.fill(
                           child: CustomPaint(
-                            painter: _StageDottedLinesPainter(),
+                            painter: _StageDottedLinesPainter(
+                              inhaleSec: _currentInhaleSec,
+                              holdSec: _currentHoldSec,
+                              exhaleSec: _currentExhaleSec,
+                            ),
                           ),
                         ),
 
-                        // 100% Exact Original Ball & Wave Animation Engine
+                        // Exact Calibrated Wave & Glowing Ball Painter
                         Positioned.fill(
                           child: AnimatedBuilder(
                             animation: _animController,
@@ -203,6 +264,9 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                                 painter: _BreathingWavePainter(
                                   progress: _animController.value,
                                   phaseLabel: _currentPhaseLabel,
+                                  inhaleSec: _currentInhaleSec,
+                                  holdSec: _currentHoldSec,
+                                  exhaleSec: _currentExhaleSec,
                                 ),
                               );
                             },
@@ -212,20 +276,24 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                     ),
                   ),
 
-                  // Subtext Guide: "회원님의 컨디션에 맞춰 조정된 속도예요"
-                  const Text(
-                    '회원님의 컨디션에 맞춰 조정된 속도예요',
-                    style: TextStyle(
-                      fontFamily: AppFonts.pretendard,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w400,
-                      color: Color(0xFFB0B4BC),
+                  // Subtext Guide: "회원님의 컨디션에 맞춰 1분간 조율 중이에요" -> "안정적인 4-7-8 호흡이 진행 중이에요"
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: Text(
+                      _guideSubtext,
+                      key: ValueKey<String>(_guideSubtext),
+                      style: const TextStyle(
+                        fontFamily: AppFonts.pretendard,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFFB0B4BC),
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 18),
 
-                  // Timer Display: 00:04
+                  // Timer Display: 00:00
                   Text(
                     _formattedTime,
                     style: GoogleFonts.outfit(
@@ -249,7 +317,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     );
   }
 
-  /// Top Header Bar matching Image 2
+  /// Top Header Bar
   Widget _buildHeader(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -305,7 +373,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     );
   }
 
-  /// Bottom Control Toolbar matching Image 2
+  /// Bottom Control Toolbar
   Widget _buildBottomToolbar() {
     return SizedBox(
       height: 64,
@@ -361,24 +429,37 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   }
 }
 
-/// Vertical Stage Dotted Lines Painter matching Image 2
+/// Vertical Stage Dotted Lines & Labels Painter
 class _StageDottedLinesPainter extends CustomPainter {
+  final double inhaleSec;
+  final double holdSec;
+  final double exhaleSec;
+
+  _StageDottedLinesPainter({
+    required this.inhaleSec,
+    required this.holdSec,
+    required this.exhaleSec,
+  });
+
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
 
-    final x1 = w * 0.25;
-    final x2 = w * 0.70;
+    final total = inhaleSec + holdSec + exhaleSec;
+    if (total <= 0) return;
+
+    final x1 = w * (inhaleSec / total);
+    final x2 = w * ((inhaleSec + holdSec) / total);
 
     final linePaint = Paint()
       ..color = Colors.white.withAlpha(50)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
-    // Vertical Dotted Lines
-    _drawDottedVerticalLine(canvas, Offset(x1, h * 0.10), h * 0.75, linePaint);
-    _drawDottedVerticalLine(canvas, Offset(x2, h * 0.10), h * 0.75, linePaint);
+    // Vertical Dotted Lines at stage transitions
+    _drawDottedVerticalLine(canvas, Offset(x1, h * 0.12), h * 0.70, linePaint);
+    _drawDottedVerticalLine(canvas, Offset(x2, h * 0.12), h * 0.70, linePaint);
 
     const textStyleHeader = TextStyle(
       fontFamily: AppFonts.pretendard,
@@ -394,28 +475,30 @@ class _StageDottedLinesPainter extends CustomPainter {
       color: Color(0xFFD0D4DC),
     );
 
-    // Header Stage Labels
+    // Header Stage Labels ("4초 들이마시기", "7초 멈추기")
+    final inhaleText = '${inhaleSec.toStringAsFixed(0)}초 들이마시기';
     final tpInhale = TextPainter(
-      text: const TextSpan(text: '4초 들이마시기', style: textStyleHeader),
+      text: TextSpan(text: inhaleText, style: textStyleHeader),
       textDirection: TextDirection.ltr,
     )..layout();
-    tpInhale.paint(canvas, Offset(x1 - tpInhale.width / 2, h * 0.22));
+    tpInhale.paint(canvas, Offset((x1 - tpInhale.width / 2).clamp(10, w - tpInhale.width - 10), h * 0.22));
 
+    final holdText = '${holdSec.toStringAsFixed(0)}초 멈추기';
     final tpHold = TextPainter(
-      text: const TextSpan(text: '7초 멈추기', style: textStyleSub),
+      text: TextSpan(text: holdText, style: textStyleSub),
       textDirection: TextDirection.ltr,
     )..layout();
-    tpHold.paint(canvas, Offset(x2 + 16, h * 0.22));
+    tpHold.paint(canvas, Offset((x2 + 12).clamp(10, w - tpHold.width - 10), h * 0.22));
 
-    // Bottom Dotted Stage Labels
+    // Bottom Dotted Stage Labels ("4초", "7초")
     final tp4s = TextPainter(
-      text: const TextSpan(text: '4초', style: textStyleSub),
+      text: TextSpan(text: '${inhaleSec.toStringAsFixed(0)}초', style: textStyleSub),
       textDirection: TextDirection.ltr,
     )..layout();
     tp4s.paint(canvas, Offset(x1 - tp4s.width / 2, h * 0.62));
 
     final tp7s = TextPainter(
-      text: const TextSpan(text: '7초', style: textStyleSub),
+      text: TextSpan(text: '${holdSec.toStringAsFixed(0)}초', style: textStyleSub),
       textDirection: TextDirection.ltr,
     )..layout();
     tp7s.paint(canvas, Offset(x2 + 10, h * 0.62));
@@ -438,17 +521,27 @@ class _StageDottedLinesPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _StageDottedLinesPainter oldDelegate) {
+    return oldDelegate.inhaleSec != inhaleSec ||
+        oldDelegate.holdSec != holdSec ||
+        oldDelegate.exhaleSec != exhaleSec;
+  }
 }
 
-/// 100% EXACT ORIGINAL Viewport-Tracked Seamless Breathing Wave & Glowing Ball Painter (from Image 1 git history)
+/// 1-Minute Scientific Adaptive Wave & Glowing Ball Painter
 class _BreathingWavePainter extends CustomPainter {
-  final double progress; // 0.0 to 1.0
+  final double progress;
   final String phaseLabel;
+  final double inhaleSec;
+  final double holdSec;
+  final double exhaleSec;
 
   _BreathingWavePainter({
     required this.progress,
     required this.phaseLabel,
+    required this.inhaleSec,
+    required this.holdSec,
+    required this.exhaleSec,
   });
 
   @override
@@ -458,45 +551,43 @@ class _BreathingWavePainter extends CustomPainter {
 
     final yBottom = h * 0.68;
     final yTop = h * 0.28;
+    final cycleW = w * 2.0;
 
-    // Single cycle width (2.2x screen width)
-    final cycleW = w * 2.2;
+    final total = inhaleSec + holdSec + exhaleSec;
+    if (total <= 0) return;
 
-    // 1. Single Cycle Reference Geometry
+    final rInhale = inhaleSec / total;
+    final rHold = (inhaleSec + holdSec) / total;
+
+    // Single Cycle Reference Path
     final singleCyclePath = Path()
       ..moveTo(0, yBottom)
-      ..lineTo(cycleW * 0.12, yBottom)
-      ..lineTo(cycleW * 0.38, yTop)    // Inhale
-      ..lineTo(cycleW * 0.62, yTop)    // Hold
-      ..lineTo(cycleW * 0.88, yBottom) // Exhale
-      ..lineTo(cycleW, yBottom);        // Rest (seamlessly connects to next cycle!)
+      ..lineTo(cycleW * rInhale, yTop)
+      ..lineTo(cycleW * rHold, yTop)
+      ..lineTo(cycleW, yBottom);
 
     final singleMetrics = singleCyclePath.computeMetrics().first;
     final singleLength = singleMetrics.length;
 
-    // Calculate ball distance along single cycle
     final ballSingleDist = progress * singleLength;
     final tangent = singleMetrics.getTangentForOffset(ballSingleDist);
     if (tangent == null) return;
     final rawBallPos = tangent.position;
 
-    // Ball target position near center of screen
     final ballScreenX = w * 0.42;
     final cameraOffsetX = ballScreenX - rawBallPos.dx;
     final screenBallPos = Offset(ballScreenX, rawBallPos.dy);
 
-    // 2. Build Seamless Multi-Cycle Continuous Path (Cycle -1, 0, 1, 2)
+    // Multi-Cycle Path
     final multiCyclePath = Path();
     bool isFirst = true;
 
     for (int cycle = -1; cycle <= 2; cycle++) {
       final originX = cycle * cycleW;
       final k0 = Offset(originX, yBottom);
-      final k1 = Offset(originX + cycleW * 0.12, yBottom);
-      final k2 = Offset(originX + cycleW * 0.38, yTop);
-      final k3 = Offset(originX + cycleW * 0.62, yTop);
-      final k4 = Offset(originX + cycleW * 0.88, yBottom);
-      final k5 = Offset(originX + cycleW, yBottom);
+      final k1 = Offset(originX + cycleW * rInhale, yTop);
+      final k2 = Offset(originX + cycleW * rHold, yTop);
+      final k3 = Offset(originX + cycleW, yBottom);
 
       if (isFirst) {
         multiCyclePath.moveTo(k0.dx, k0.dy);
@@ -507,28 +598,23 @@ class _BreathingWavePainter extends CustomPainter {
       multiCyclePath.lineTo(k1.dx, k1.dy);
       multiCyclePath.lineTo(k2.dx, k2.dy);
       multiCyclePath.lineTo(k3.dx, k3.dy);
-      multiCyclePath.lineTo(k4.dx, k4.dy);
-      multiCyclePath.lineTo(k5.dx, k5.dy);
     }
 
     final multiMetrics = multiCyclePath.computeMetrics().first;
     final multiLength = multiMetrics.length;
-
-    // Ball distance in multi-cycle metrics space (Cycle 0 starts at singleLength)
     final ballMultiDist = singleLength + ballSingleDist;
 
-    // Save canvas state for camera tracking transformation
     canvas.save();
     canvas.translate(cameraOffsetX, 0);
 
-    // 3. Draw Faint Seamless Base Track (희미한 전체 가이드 트랙)
+    // Base Track Paint
     final baseTrackPaint = Paint()
       ..color = const Color(0xFF4A5248).withAlpha(80)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6;
     canvas.drawPath(multiCyclePath, baseTrackPaint);
 
-    // 4. Draw Continuous Unbroken Active Glowing Ribbon around the Ball with Shader Gradient
+    // Active Glowing Ribbon
     const backWindow = 280.0;
     const forwardWindow = 200.0;
     final startDist = (ballMultiDist - backWindow).clamp(0.0, multiLength);
@@ -562,7 +648,7 @@ class _BreathingWavePainter extends CustomPainter {
 
     canvas.restore();
 
-    // 5. Draw Outer Radial Halo Glow of Ball (Screen Center)
+    // Outer Radial Halo Glow
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
@@ -573,13 +659,13 @@ class _BreathingWavePainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: screenBallPos, radius: 28));
     canvas.drawCircle(screenBallPos, 28, glowPaint);
 
-    // 6. Draw Inner Bright Core Ball
+    // Inner Bright Core Ball
     final ballCorePaint = Paint()
       ..color = const Color(0xFFE2FFDA)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(screenBallPos, 10, ballCorePaint);
 
-    // 7. Draw Phase Label Pill Beside Ball ("내쉬기", "들이마시기", etc.)
+    // Phase Label Pill Beside Ball
     final textPainter = TextPainter(
       text: TextSpan(
         text: phaseLabel,
@@ -621,6 +707,9 @@ class _BreathingWavePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _BreathingWavePainter oldDelegate) {
     return oldDelegate.progress != progress ||
-        oldDelegate.phaseLabel != phaseLabel;
+        oldDelegate.phaseLabel != phaseLabel ||
+        oldDelegate.inhaleSec != inhaleSec ||
+        oldDelegate.holdSec != holdSec ||
+        oldDelegate.exhaleSec != exhaleSec;
   }
 }
