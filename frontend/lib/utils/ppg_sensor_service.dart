@@ -21,14 +21,11 @@ class PpgMeasurementResult {
     this.signalQuality = 'Good',
   });
 
-  /// 컨디션 지수 (50 ~ 96점, 높을수록 건강함)
   int get conditionScore => (hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
 
-  /// 스트레스 지수 (15 ~ 95점, 낮을수록 안정적)
   int get stressIndex =>
       ((bpm / 1.3) + (50 - hrvSdnnMs * 0.7)).clamp(15.0, 95.0).round();
 
-  /// 스트레스 상태 텍스트
   String get stressStatusText {
     if (stressIndex < 35) return '낮음';
     if (stressIndex < 65) return '보통';
@@ -37,26 +34,90 @@ class PpgMeasurementResult {
 
   factory PpgMeasurementResult.defaultSample() {
     return PpgMeasurementResult(
-      bpm: 78,
-      hrvSdnnMs: 24.5, // 교감신경 우세 sample
+      bpm: 76,
+      hrvSdnnMs: 28.5,
       breathRpm: 14,
       measuredInhaleSec: 2.2,
       measuredExhaleSec: 2.2,
       signalQuality: 'Good',
     );
   }
+
+  /// 5대 카테고리 시뮬레이션용 랜덤 결과 생성기 (웹/노트북 테스트용)
+  factory PpgMeasurementResult.randomSample() {
+    final rng = math.Random();
+    final categoryIndex = rng.nextInt(5); // 0 ~ 4 (5대 카테고리 랜덤 생성)
+
+    switch (categoryIndex) {
+      case 0:
+        // 1. 긴급 대처 (BPM 98~106, HRV 16~22ms) -> 생리학적 한숨
+        return PpgMeasurementResult(
+          bpm: 98 + rng.nextInt(9),
+          hrvSdnnMs: 16.0 + rng.nextDouble() * 6.0,
+          breathRpm: 22,
+          measuredInhaleSec: 1.8,
+          measuredExhaleSec: 2.0,
+          signalQuality: 'Good',
+        );
+      case 1:
+        // 2. 심리 이완 (BPM 85~92, HRV 18~28ms) -> 4-7-8 호흡
+        return PpgMeasurementResult(
+          bpm: 85 + rng.nextInt(8),
+          hrvSdnnMs: 18.0 + rng.nextDouble() * 10.0,
+          breathRpm: 16,
+          measuredInhaleSec: 2.0,
+          measuredExhaleSec: 2.2,
+          signalQuality: 'Good',
+        );
+      case 2:
+        // 3. 집중·몰입 (BPM 72~82, HRV 34~48ms) -> 4-4-4-4 박스 호흡
+        return PpgMeasurementResult(
+          bpm: 72 + rng.nextInt(11),
+          hrvSdnnMs: 34.0 + rng.nextDouble() * 14.0,
+          breathRpm: 14,
+          measuredInhaleSec: 2.2,
+          measuredExhaleSec: 2.2,
+          signalQuality: 'Good',
+        );
+      case 3:
+        // 4. 회복·밸런스 (BPM 64~72, HRV 58~72ms) -> 5.5-5.5 공진 호흡
+        return PpgMeasurementResult(
+          bpm: 64 + rng.nextInt(9),
+          hrvSdnnMs: 58.0 + rng.nextDouble() * 14.0,
+          breathRpm: 12,
+          measuredInhaleSec: 2.6,
+          measuredExhaleSec: 2.6,
+          signalQuality: 'Good',
+        );
+      case 4:
+      default:
+        // 5. 에너지 각성 (BPM 52~58, HRV 42~58ms) -> 4-1-2-1 각성 호흡
+        return PpgMeasurementResult(
+          bpm: 52 + rng.nextInt(7),
+          hrvSdnnMs: 42.0 + rng.nextDouble() * 16.0,
+          breathRpm: 10,
+          measuredInhaleSec: 2.8,
+          measuredExhaleSec: 2.2,
+          signalQuality: 'Good',
+        );
+    }
+  }
 }
 
 /// PpgSensorService (카메라 PPG 센싱 및 실시간 붉은빛 명도 분석 서비스)
 class PpgSensorService {
-  /// 앱 세션 전역 최신 측정 데이터 저장소
   static PpgMeasurementResult? latestResult;
   CameraController? _cameraController;
   bool _isInitializing = false;
   bool _isCameraAvailable = false;
   bool isFingerDetected = false;
+  bool _isDisposed = false;
 
-  // Stream Controllers for real-time PPG value & finger contact state
+  double debugAvgY = 0.0;
+  double debugAvgU = 0.0;
+  double debugAvgV = 0.0;
+  double debugDiff = 0.0;
+
   final StreamController<double> _ppgValueController =
       StreamController<double>.broadcast();
   final StreamController<bool> _fingerStateController =
@@ -65,16 +126,21 @@ class PpgSensorService {
   Stream<double> get ppgStream => _ppgValueController.stream;
   Stream<bool> get fingerStateStream => _fingerStateController.stream;
 
-  // Peak detection variables for PPG analysis
   final List<DateTime> _peakTimestamps = [];
   final List<double> _rrIntervalsMs = [];
   Timer? _simulationTimer;
-  double _simPhase = 0.0;
 
   bool get isCameraAvailable => _isCameraAvailable;
 
-  /// Initialize rear camera and turn on flash torch
   Future<void> initializeCamera() async {
+    _isDisposed = false;
+    isFingerDetected = false;
+    if (!_fingerStateController.isClosed) {
+      _fingerStateController.add(false);
+    }
+    _peakTimestamps.clear();
+    _rrIntervalsMs.clear();
+
     if (_isInitializing || _cameraController != null) return;
     _isInitializing = true;
 
@@ -85,7 +151,6 @@ class PpgSensorService {
         return;
       }
 
-      // Select primary rear camera
       final rearCamera = cameras.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
@@ -100,7 +165,6 @@ class PpgSensorService {
 
       await _cameraController!.initialize();
 
-      // Turn on flash torch for PPG sensing
       try {
         await _cameraController!.setFlashMode(FlashMode.torch);
       } catch (e) {
@@ -108,8 +172,6 @@ class PpgSensorService {
       }
 
       _isCameraAvailable = true;
-
-      // Start processing camera frame image stream
       await _cameraController!.startImageStream(_processCameraFrame);
     } catch (e) {
       debugPrint('Camera initialization error: $e');
@@ -119,40 +181,95 @@ class PpgSensorService {
     }
   }
 
-  /// Process individual camera frame image to calculate Red channel brightness
+  /// Process individual camera frame image with Bulletproof YUV Finger Contact Detection
   void _processCameraFrame(CameraImage image) {
-    double redSum = 0;
+    if (_isDisposed || _cameraController == null) return;
+
+    double ySum = 0;
+    double uSum = 0;
+    double vSum = 0;
     int sampleCount = 0;
 
-    // YUV420 format processing (Android & iOS standard)
-    if (image.planes.isNotEmpty) {
-      final Plane plane = image.planes[0]; // Y plane (Luminance)
-      final bytes = plane.bytes;
-      final int step = math.max(1, bytes.length ~/ 200); // 200 sample points for speed
+    if (image.planes.length >= 3) {
+      final yBytes = image.planes[0].bytes;
+      final uBytes = image.planes[1].bytes;
+      final vBytes = image.planes[2].bytes;
 
-      for (int i = 0; i < bytes.length; i += step) {
-        redSum += bytes[i];
+      final int step = math.max(1, yBytes.length ~/ 200);
+      final int uStride = image.planes[1].bytesPerPixel ?? 1;
+      final int vStride = image.planes[2].bytesPerPixel ?? 1;
+
+      for (int i = 0; i < yBytes.length; i += step) {
+        final y = yBytes[i].toDouble();
+        final uIdx = math.min((i ~/ 2) * uStride, uBytes.length - 1);
+        final vIdx = math.min((i ~/ 2) * vStride, vBytes.length - 1);
+
+        final u = uBytes[uIdx].toDouble();
+        final v = vBytes[vIdx].toDouble();
+
+        ySum += y;
+        uSum += u;
+        vSum += v;
         sampleCount++;
+      }
+    } else if (image.planes.length == 2) {
+      final yBytes = image.planes[0].bytes;
+      final uvBytes = image.planes[1].bytes;
+      final int step = math.max(1, yBytes.length ~/ 200);
+
+      for (int i = 0; i < yBytes.length; i += step) {
+        final y = yBytes[i].toDouble();
+        final uvIdx = math.min(i, uvBytes.length - 2);
+        final u = uvBytes[uvIdx].toDouble();
+        final v = uvBytes[uvIdx + 1].toDouble();
+
+        ySum += y;
+        uSum += u;
+        vSum += v;
+        sampleCount++;
+      }
+    } else if (image.planes.isNotEmpty) {
+      final yBytes = image.planes[0].bytes;
+      final step = math.max(1, yBytes.length ~/ 200);
+      for (int i = 0; i < yBytes.length; i += step) {
+        ySum += yBytes[i].toDouble();
+        sampleCount++;
+      }
+      uSum = 128.0 * sampleCount;
+      vSum = 128.0 * sampleCount;
+    }
+
+    if (sampleCount == 0) return;
+
+    final avgY = ySum / sampleCount;
+    final avgU = uSum / sampleCount;
+    final avgV = vSum / sampleCount;
+    final chromDiff = avgV - avgU;
+
+    debugAvgY = avgY;
+    debugAvgU = avgU;
+    debugAvgV = avgV;
+    debugDiff = chromDiff;
+
+    // Strict Finger Contact Condition:
+    // Finger covering torch LED yields high V (> 160) and low U (< 115) -> chromDiff > 45
+    // Air/room light yields neutral V ~128 and U ~128 -> chromDiff < 15
+    final detected = (chromDiff > 45.0 && avgV > 150.0) || kIsWeb;
+
+    if (detected != isFingerDetected) {
+      isFingerDetected = detected;
+      if (!_fingerStateController.isClosed && !_isDisposed) {
+        _fingerStateController.add(isFingerDetected);
       }
     }
 
-    final avgRed = sampleCount > 0 ? (redSum / sampleCount) : 0.0;
-
-    // Threshold check: Finger covering camera & flash yields high luminance (> 170)
-    final detected = avgRed > 170.0 || kIsWeb;
-    if (detected != isFingerDetected) {
-      isFingerDetected = detected;
-      _fingerStateController.add(isFingerDetected);
-    }
-
-    if (isFingerDetected) {
-      // Add peak detection logic
+    if (isFingerDetected && !_ppgValueController.isClosed && !_isDisposed) {
       final now = DateTime.now();
-      _ppgValueController.add(avgRed);
+      _ppgValueController.add(avgY);
 
       if (_peakTimestamps.isNotEmpty) {
         final diffMs = now.difference(_peakTimestamps.last).inMilliseconds;
-        if (diffMs > 500 && diffMs < 1200 && avgRed > 210) {
+        if (diffMs > 500 && diffMs < 1200) {
           _peakTimestamps.add(now);
           _rrIntervalsMs.add(diffMs.toDouble());
         }
@@ -162,32 +279,18 @@ class PpgSensorService {
     }
   }
 
-  /// Simulation fallback for Emulator / Desktop / No Camera environment
   void _startSimulationFallback() {
     _isCameraAvailable = false;
-    isFingerDetected = true;
-    _fingerStateController.add(true);
-
+    isFingerDetected = false;
+    if (!_fingerStateController.isClosed && !_isDisposed) {
+      _fingerStateController.add(false);
+    }
     _simulationTimer?.cancel();
-    _simulationTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      _simPhase += 0.15;
-      final wave = math.sin(_simPhase) * 20.0 + 200.0;
-      _ppgValueController.add(wave);
-
-      // Simulate PPG peaks
-      final now = DateTime.now();
-      if (_peakTimestamps.isEmpty ||
-          now.difference(_peakTimestamps.last).inMilliseconds > 770) {
-        _peakTimestamps.add(now);
-        _rrIntervalsMs.add(770.0 + (math.Random().nextDouble() * 40 - 20));
-      }
-    });
   }
 
-  /// Compute final 20-second measurement results
   PpgMeasurementResult computeResults() {
-    int bpm = 76;
-    double hrvSdnn = 28.5; // Default 교감신경 우세 sample
+    int bpm = 75;
+    double hrvSdnn = 28.5;
     int breathRpm = 14;
 
     if (_rrIntervalsMs.length >= 3) {
@@ -195,70 +298,53 @@ class PpgSensorService {
           _rrIntervalsMs.reduce((a, b) => a + b) / _rrIntervalsMs.length;
       bpm = (60000 / avgIntervalMs).round().clamp(55, 130);
 
-      // Standard deviation of RR intervals (SDNN for HRV)
       final mean = avgIntervalMs;
       final variance = _rrIntervalsMs
               .map((x) => math.pow(x - mean, 2))
               .reduce((a, b) => a + b) /
           _rrIntervalsMs.length;
-      hrvSdnn = math.sqrt(variance).clamp(12.0, 85.0);
-
-      // RPM estimation based on HRV RSA
+      hrvSdnn = math.sqrt(variance).clamp(12.0, 65.0);
       breathRpm = (bpm / 5.2).round().clamp(10, 20);
-    } else {
-      // Dynamic fallback for simulation or quick measurements
-      final rand = math.Random();
-      bpm = 70 + rand.nextInt(18); // 70 ~ 87 bpm
-      hrvSdnn = 18.0 + rand.nextDouble() * 24.0; // 18.0 ~ 42.0 ms
-      breathRpm = (bpm / 5.2).round().clamp(11, 17);
     }
 
-    final double totalBreathCycleSec = 60.0 / breathRpm; // e.g. 60/14 = 4.28s
-    final double initialInhale = (totalBreathCycleSec * 0.48).clamp(1.8, 3.5);
-    final double initialExhale = (totalBreathCycleSec * 0.52).clamp(1.8, 3.5);
+    final inhaleSec = (60.0 / breathRpm * 0.42).clamp(1.8, 4.5);
+    final exhaleSec = (60.0 / breathRpm * 0.58).clamp(2.0, 6.0);
 
-    final res = PpgMeasurementResult(
+    final result = PpgMeasurementResult(
       bpm: bpm,
-      hrvSdnnMs: hrvSdnn,
+      hrvSdnnMs: double.parse(hrvSdnn.toStringAsFixed(1)),
       breathRpm: breathRpm,
-      measuredInhaleSec: double.parse(initialInhale.toStringAsFixed(1)),
-      measuredExhaleSec: double.parse(initialExhale.toStringAsFixed(1)),
-      signalQuality: 'Good',
+      measuredInhaleSec: double.parse(inhaleSec.toStringAsFixed(1)),
+      measuredExhaleSec: double.parse(exhaleSec.toStringAsFixed(1)),
+      signalQuality: _rrIntervalsMs.length >= 3 ? 'Good' : 'Measuring',
     );
-    latestResult = res;
-    return res;
+
+    latestResult = result;
+    return result;
   }
 
-  /// Turn off torch flash and stop camera image stream when measurement completes
   Future<void> stopCamera() async {
+    _isDisposed = true;
     _simulationTimer?.cancel();
     if (_cameraController != null) {
       try {
-        if (_cameraController!.value.isStreamingImages) {
-          await _cameraController!.stopImageStream();
-        }
+        await _cameraController!.stopImageStream();
+      } catch (_) {}
+      try {
         await _cameraController!.setFlashMode(FlashMode.off);
-      } catch (e) {
-        debugPrint('Error stopping camera: $e');
-      }
-    }
-  }
-
-  /// Stop camera and clean up resources
-  Future<void> dispose() async {
-    _simulationTimer?.cancel();
-    if (_cameraController != null) {
-      try {
-        if (_cameraController!.value.isStreamingImages) {
-          await _cameraController!.stopImageStream();
-        }
-        await _cameraController!.dispose();
-      } catch (e) {
-        debugPrint('Error disposing camera: $e');
-      }
+      } catch (_) {}
+      await _cameraController!.dispose();
       _cameraController = null;
     }
-    _ppgValueController.close();
-    _fingerStateController.close();
+    isFingerDetected = false;
+    if (!_fingerStateController.isClosed) {
+      _fingerStateController.add(false);
+    }
+  }
+
+  void dispose() {
+    stopCamera();
+    if (!_ppgValueController.isClosed) _ppgValueController.close();
+    if (!_fingerStateController.isClosed) _fingerStateController.close();
   }
 }

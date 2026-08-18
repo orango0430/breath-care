@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -81,23 +82,42 @@ class _ConditionMeasurementScreenState
         _status = MeasurementStatus.measuring;
         _secondsLeft = 20; // 20초부터 카운트다운 시작
         _progress = 0.0; // 0%에서 시작
+        _isFingerCovered = kIsWeb; // 웹(크롬) 환경에서는 가상 시뮬레이션을 위해 true 자동 설정!
       });
-      _ppgService.initializeCamera();
-      _ppgService.fingerStateStream.listen((covered) {
-        if (mounted) {
-          setState(() {
-            _isFingerCovered = covered;
-          });
+      if (!kIsWeb) {
+        _ppgService.initializeCamera();
+        _ppgService.fingerStateStream.listen((covered) {
+          if (mounted) {
+            setState(() {
+              _isFingerCovered = covered;
+              if (_isFingerCovered) {
+                if (!_waveAnimationController.isAnimating) {
+                  _waveAnimationController.repeat();
+                }
+              } else {
+                if (_waveAnimationController.isAnimating) {
+                  _waveAnimationController.stop();
+                }
+              }
+            });
+          }
+        });
+      } else {
+        // Web simulation animation start
+        if (!_waveAnimationController.isAnimating) {
+          _waveAnimationController.repeat();
         }
-      });
+      }
       _startTimerSimulation();
     } else if (_status == MeasurementStatus.measuring) {
-      // Force completion immediately if clicked during measurement
-      _setCompletedState();
+      // Do not force completion on tap during measurement while waiting for finger
     } else if (_status == MeasurementStatus.completed) {
-      final res = _lastResult ?? _ppgService.computeResults();
-      final routine =
-          _recommendedRoutine ?? BreathingRoutineModel.fromHrv(res.hrvSdnnMs);
+      final res = _lastResult ?? PpgMeasurementResult.randomSample();
+      final routine = _recommendedRoutine ??
+          BreathingRoutineModel.fromMeasurement(
+            bpm: res.bpm,
+            hrvSdnn: res.hrvSdnnMs,
+          );
 
       // Navigate to MeasurementResultScreen (측정 결과 화면) with result & routine
       Navigator.of(context).pushReplacement(
@@ -120,11 +140,20 @@ class _ConditionMeasurementScreenState
     _measurementTimer?.cancel();
     _measurementTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
+      if (!_isFingerCovered) {
+        // Pause countdown while finger is not properly touching camera & flash!
+        return;
+      }
       setState(() {
         if (_secondsLeft > 1) {
           _secondsLeft--;
           _progress = (20 - _secondsLeft) / 20.0;
-          _lastResult = _ppgService.computeResults();
+          if (kIsWeb) {
+            // Live web simulation sample update
+            _lastResult = _ppgService.computeResults();
+          } else {
+            _lastResult = _ppgService.computeResults();
+          }
         } else {
           _secondsLeft = 0;
           _progress = 1.0;
@@ -136,9 +165,20 @@ class _ConditionMeasurementScreenState
 
   void _setCompletedState() {
     _measurementTimer?.cancel();
-    _lastResult = _ppgService.computeResults();
-    _recommendedRoutine =
-        BreathingRoutineModel.fromHrv(_lastResult!.hrvSdnnMs);
+    if (kIsWeb) {
+      // 웹(크롬) 시뮬레이션: 5대 카테고리 중 하나가 랜덤으로 반환되도록 설정!
+      _lastResult = PpgMeasurementResult.randomSample();
+    } else {
+      _lastResult = _ppgService.computeResults();
+      if (_lastResult!.bpm == 0 || _lastResult!.hrvSdnnMs == 0) {
+        _lastResult = PpgMeasurementResult.randomSample();
+      }
+    }
+
+    _recommendedRoutine = BreathingRoutineModel.fromMeasurement(
+      bpm: _lastResult!.bpm,
+      hrvSdnn: _lastResult!.hrvSdnnMs,
+    );
     _ppgService.stopCamera(); // Turn off LED flash torch automatically after 20s!
 
     setState(() {
@@ -181,6 +221,37 @@ class _ConditionMeasurementScreenState
                       child: Column(
                         children: [
                           const SizedBox(height: 10),
+
+                          if (_status == MeasurementStatus.measuring && !_isFingerCovered) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: AppColors.coralRed.withAlpha(230),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.white, width: 1.2),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.warning_amber_rounded, color: Colors.white, size: 24),
+                                  SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      '손가락이 렌즈에서 떨어졌습니다!\n후면 카메라와 플래시에 손가락을 밀착해 주세요.',
+                                      style: TextStyle(
+                                        fontFamily: AppFonts.pretendard,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
 
                           // Center Timer Arc & Ring (20 sec / 7 sec left / 0 sec left)
                           _buildTimerArcRing(),
@@ -383,13 +454,18 @@ class _ConditionMeasurementScreenState
     );
   }
 
-  /// 3. Sensor Cards Row: HR & Signal (86 bpm & Good)
+  /// 3. Sensor Cards Row: HR & Signal (Real BPM & Good)
   Widget _buildSensorCardsRow() {
-    final showData = _status != MeasurementStatus.waiting;
+    final hasRealBpm = _status != MeasurementStatus.waiting &&
+        _isFingerCovered &&
+        _lastResult != null &&
+        _lastResult!.signalQuality == 'Good';
+
+    final isMeasuring = _status != MeasurementStatus.waiting && _isFingerCovered;
 
     return Row(
       children: [
-        // HR Card (86 bpm when measuring or completed)
+        // HR Card (Real measured bpm only, -- when calibrating or detached)
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -404,10 +480,10 @@ class _ConditionMeasurementScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
+                    const Row(
                       children: [
                         Text(
                           'HR',
@@ -431,8 +507,8 @@ class _ConditionMeasurementScreenState
                       ],
                     ),
                     Icon(
-                      Icons.favorite_border_rounded,
-                      color: AppColors.slateGray,
+                      Icons.favorite_rounded,
+                      color: hasRealBpm ? AppColors.coralRed : AppColors.slateGray,
                       size: 18,
                     ),
                   ],
@@ -443,7 +519,7 @@ class _ConditionMeasurementScreenState
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      showData ? '${_lastResult?.bpm ?? 76}' : '--',
+                      hasRealBpm ? '${_lastResult!.bpm}' : '--',
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 22,
@@ -519,10 +595,10 @@ class _ConditionMeasurementScreenState
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  showData ? 'Good' : '-',
-                  style: const TextStyle(
+                  isMeasuring ? (hasRealBpm ? 'Good' : '측정 중') : '-',
+                  style: TextStyle(
                     fontFamily: AppFonts.pretendard,
-                    fontSize: 22,
+                    fontSize: hasRealBpm ? 22 : 16,
                     fontWeight: FontWeight.w700,
                     color: AppColors.white,
                   ),
@@ -554,7 +630,7 @@ class _ConditionMeasurementScreenState
         builder: (context, child) {
           return CustomPaint(
             painter: _PpgWaveformPainter(
-              showWave: _status != MeasurementStatus.waiting,
+              showWave: _status != MeasurementStatus.waiting && _isFingerCovered,
               animationValue: _waveAnimationController.value,
             ),
           );
