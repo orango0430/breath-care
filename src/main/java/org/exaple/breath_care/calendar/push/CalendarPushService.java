@@ -36,8 +36,13 @@ public class CalendarPushService {
     /** 예정 시각을 이만큼 넘겼으면 보내지 않는다. 서버가 꺼져 있었다고 새벽에 몰아 보내면 안 된다. */
     private static final Duration LATE_TOLERANCE = Duration.ofMinutes(10);
 
-    /** 이 시간대에는 보내지 않는다. 22시 시작이라 전날 밤 21시 알림은 영향받지 않는다. */
-    private static final LocalTime QUIET_FROM = LocalTime.of(22, 0);
+    /**
+     * 이 시간대에는 보내지 않는다.
+     *
+     * <p>전날 밤 알림이 22시로 옮겨지면서 23시로 미뤘다. 22시로 두면 알림 예정 시각이
+     * 조용시간 첫 순간과 겹쳐 <b>한 건도 나가지 않는다.</b> 오류도 안 나고 그냥 조용히 없어진다.
+     */
+    private static final LocalTime QUIET_FROM = LocalTime.of(23, 0);
     private static final LocalTime QUIET_TO = LocalTime.of(8, 0);
 
     /** 후보를 넉넉히 훑기 위한 조회 폭. DAY_BEFORE가 최대 하루 앞이라 이틀이면 충분하다. */

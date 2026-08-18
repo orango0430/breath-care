@@ -76,7 +76,7 @@ class SessionControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"preMeasurementId":%d,"preset":"EXHALE_EXTENDED"}
+                                {"preMeasurementId":%d,"preset":"RELAX_FOUR_SIX"}
                                 """.formatted(preId)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
@@ -92,10 +92,10 @@ class SessionControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"preMeasurementId":%d,"preset":"EXHALE_EXTENDED"}
+                                {"preMeasurementId":%d,"preset":"RELAX_FOUR_SIX"}
                                 """.formatted(preId)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.preset").value("EXHALE_EXTENDED"))
+                .andExpect(jsonPath("$.data.preset").value("RELAX_FOUR_SIX"))
                 .andExpect(jsonPath("$.data.before.hr").value(88.0))
                 .andExpect(jsonPath("$.data.before.stressScore").value(78.0))
                 .andExpect(jsonPath("$.data.after").doesNotExist())

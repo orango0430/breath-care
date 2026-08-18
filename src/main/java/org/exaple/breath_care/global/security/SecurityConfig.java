@@ -43,6 +43,8 @@ public class SecurityConfig {
                         // 비회원 측정. 저장하지 않고 계산만 하므로 인증 없이 연다.
                         // 메서드를 POST로 못 박아 같은 경로의 다른 요청이 새지 않게 한다.
                         .requestMatchers(HttpMethod.POST, "/api/measurements/analyze").permitAll()
+                        // 호흡법 목록. 개인 정보가 없는 고정 데이터고, 비회원도 호흡은 그대로 쓴다.
+                        .requestMatchers(HttpMethod.GET, "/api/breathing/presets").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handler -> handler
                         .authenticationEntryPoint(authenticationEntryPoint())

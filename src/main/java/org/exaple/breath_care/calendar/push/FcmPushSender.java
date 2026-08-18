@@ -43,6 +43,8 @@ public class FcmPushSender implements PushSender {
                 // 알림을 탭했을 때 앱이 바로 해당 세션을 열 수 있도록 넘긴다.
                 .putData("eventId", String.valueOf(message.eventId()))
                 .putData("pushType", message.pushType().name())
+                // 앱이 이 값으로 곧장 해당 호흡 화면을 연다.
+                .putData("preset", message.preset().name())
                 .build();
 
         try {

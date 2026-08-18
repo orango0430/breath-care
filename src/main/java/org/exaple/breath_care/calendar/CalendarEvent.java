@@ -38,6 +38,15 @@ public class CalendarEvent {
     @Column(length = 20)
     private EventType eventType;
 
+    /**
+     * 시안의 "+"로 직접 만든 카테고리 이름. 없으면 종류의 기본 이름을 쓴다.
+     *
+     * <p><b>이름만 바꾼다. 호흡 추천은 계속 {@link #eventType}이 정한다.</b>
+     * 자유 문자열로는 어떤 호흡을 권할지 판단할 근거가 없기 때문이다.
+     */
+    @Column(length = 20)
+    private String customCategory;
+
     /** 일정 시각. 앱에서 오프셋 포함 ISO-8601로 보내고 서버는 UTC로 저장한다. */
     @Column(nullable = false)
     private Instant startAt;
@@ -53,19 +62,21 @@ public class CalendarEvent {
     @Column(nullable = false)
     private Instant createdAt;
 
-    private CalendarEvent(Long userId, String title, EventType eventType, Instant startAt,
-                          EventSource source, String externalId) {
+    private CalendarEvent(Long userId, String title, EventType eventType, String customCategory,
+                          Instant startAt, EventSource source, String externalId) {
         this.userId = userId;
         this.title = title;
         this.eventType = eventType;
+        this.customCategory = customCategory;
         this.startAt = startAt;
         this.source = source;
         this.externalId = externalId;
         this.createdAt = Instant.now();
     }
 
-    public static CalendarEvent create(Long userId, String title, EventType eventType, Instant startAt) {
-        return new CalendarEvent(userId, title, eventType, startAt, EventSource.MANUAL, null);
+    public static CalendarEvent create(Long userId, String title, EventType eventType,
+                                       String customCategory, Instant startAt) {
+        return new CalendarEvent(userId, title, eventType, customCategory, startAt, EventSource.MANUAL, null);
     }
 
     /**
@@ -73,13 +84,25 @@ public class CalendarEvent {
      * 폰 일정에는 종류 정보가 없고, 제목으로 추측하면 틀리기 쉽다. 사용자가 앱에서 고르면 채워진다.
      */
     public static CalendarEvent fromPhone(Long userId, String title, Instant startAt, String externalId) {
-        return new CalendarEvent(userId, title, null, startAt, EventSource.PHONE, externalId);
+        return new CalendarEvent(userId, title, null, null, startAt, EventSource.PHONE, externalId);
     }
 
-    public void update(String title, EventType eventType, Instant startAt) {
+    public void update(String title, EventType eventType, String customCategory, Instant startAt) {
         this.title = title;
         this.eventType = eventType;
+        this.customCategory = customCategory;
         this.startAt = startAt;
+    }
+
+    /**
+     * 화면·알림에 쓸 카테고리 이름. 직접 만든 이름이 있으면 그것, 없으면 종류의 기본 이름.
+     * 종류까지 비어 있으면(폰 캘린더 동기화 건) "일정"이다.
+     */
+    public String displayCategory() {
+        if (customCategory != null && !customCategory.isBlank()) {
+            return customCategory;
+        }
+        return (eventType != null) ? eventType.getLabel() : EventType.ETC.getLabel();
     }
 
     /**

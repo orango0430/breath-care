@@ -22,3 +22,14 @@ push:
 jwt:
   secret: test-only-secret-key-not-used-anywhere-else
   access-token-validity-ms: 3600000
+
+# 테스트는 실제 Gemini를 부르지 않는다. 생성기를 대역으로 갈아 끼우고 규칙만 검증한다.
+gemini:
+  enabled: false
+  api-key: ""
+  model: test-model
+  min-measurements: 3
+  regenerate-cooldown-hours: 6
+  max-output-tokens: 900
+  thinking-budget: 0
+  timeout-seconds: 20
