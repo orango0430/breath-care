@@ -48,7 +48,8 @@ firebase-service-account.json
 **/firebase-service-account*.json
 *-firebase-adminsdk-*.json
 **/*-firebase-adminsdk-*.json
-google-services.json
+# google-services.json은 여기 없다. 비밀이 아니라 APK 안에 그대로 들어가는 클라이언트 설정이고,
+# 안의 키는 패키지명 + SHA-1 지문으로 잠겨 있다. 없으면 안드로이드 빌드가 실패하므로 커밋한다.
 
 ### Flutter ###
 .dart_tool/
