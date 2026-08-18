@@ -39,6 +39,17 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    if (password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('비밀번호는 최소 8자 이상이어야 합니다.'),
+          backgroundColor: AppColors.coralRed,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('로그인이 성공적으로 완료되었습니다.'),

@@ -34,12 +34,23 @@ class _SignupScreenState extends State<SignupScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
-    final name = _nameController.text.trim();
+    final nickname = _nameController.text.trim(); // 백엔드 API 수신 규격: nickname
 
-    if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty || name.isEmpty) {
+    if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty || nickname.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('모든 회원가입 정보를 입력해 주세요.'),
+          backgroundColor: AppColors.coralRed,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    if (password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('비밀번호는 최소 8자 이상이어야 합니다.'),
           backgroundColor: AppColors.coralRed,
           duration: Duration(seconds: 2),
         ),
