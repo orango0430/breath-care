@@ -10,9 +10,12 @@ import org.springframework.stereotype.Component;
  *
  * <p>리포트만 503으로 막히고 측정·통계·알림은 그대로 동작한다.
  * 키를 못 받은 팀원이 앱을 못 띄우는 상황을 만들지 않기 위한 것이다.
+ *
+ * <p>{@code report.provider}를 아예 적지 않은 경우도 여기로 온다. 기본값이 "안 씀"이어야
+ * 설정을 깜빡한 환경에서 엉뚱한 제공자로 호출이 나가는 일이 없다.
  */
 @Component
-@ConditionalOnProperty(name = "gemini.enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = ReportProvider.KEY, havingValue = ReportProvider.NONE, matchIfMissing = true)
 public class DisabledReportGenerator implements ReportGenerator {
 
     private static final String DISABLED = "disabled";

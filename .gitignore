@@ -37,8 +37,9 @@ out/
 .vscode/
 
 ### .env ###
+# .env(로컬 개발, 스프링이 읽음)와 .env.prod(배포, docker compose가 읽음) 둘 다 막는다.
+# 서식 파일만 예외로 남긴다.
 .env
-# .env.prod처럼 접미사가 붙은 것도 전부 막는다. 예제 파일만 예외다.
 .env.*
 !.env.prod.example
 

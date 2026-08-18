@@ -7,6 +7,7 @@ import org.exaple.breath_care.statistics.dto.MetricSummary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -28,31 +29,32 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * Gemini 호출부. 실제 API를 부르지 않고 요청 모양과 응답 처리만 확인한다.
+ * OpenAI 호출부. 실제 API를 부르지 않고 요청 모양과 응답 처리만 확인한다.
  *
- * <p>특히 <b>실패가 전부 REPORT_UNAVAILABLE로 모이는지</b>를 본다.
- * 여기서 예외가 새어 나가면 리포트 하나 때문에 500이 뜬다.
+ * <p>Gemini 쪽과 같은 것을 본다 — <b>실패가 전부 REPORT_UNAVAILABLE로 모이는지.</b>
+ * 공유 키라 다른 팀 트래픽 때문에 429가 날 수 있어서 특히 중요하다.
  */
-class GeminiReportGeneratorTest {
+class OpenAiReportGeneratorTest {
 
-    private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
-    private static final String MODEL = "gemini-flash-latest";
+    private static final String BASE_URL = "https://api.openai.com/v1";
+    private static final String CHAT = BASE_URL + "/chat/completions";
+    private static final String MODEL = "gpt-5.4-mini";
 
     private final ObjectMapper mapper = JsonMapper.builder().build();
 
     private MockRestServiceServer server;
-    private GeminiReportGenerator generator;
+    private OpenAiReportGenerator generator;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         server = MockRestServiceServer.bindTo(builder).build();
 
-        generator = new GeminiReportGenerator(
+        generator = new OpenAiReportGenerator(
                 builder.build(),
                 mapper,
-                new GeminiProperties("test-key", MODEL, 0),
-                new ReportProperties(ReportProvider.GEMINI, 3, 6, 900, 20));
+                new OpenAiProperties("test-key", MODEL),
+                new ReportProperties(ReportProvider.OPENAI, 3, 6, 900, 20));
     }
 
     private ReportInput input() {
@@ -67,12 +69,14 @@ class GeminiReportGeneratorTest {
                         DailyMetric.empty(LocalDate.of(2026, 8, 12))));
     }
 
-    /** Gemini는 본문 JSON을 문자열 한 칸(text)에 담아 돌려준다. */
+    /** OpenAI는 본문 JSON을 message.content 문자열에 담아 돌려준다. */
     private String responseWith(String innerJson) {
         return mapper.writeValueAsString(Map.of(
-                "candidates", List.of(Map.of(
-                        "content", Map.of("parts", List.of(Map.of("text", innerJson))),
-                        "finishReason", "STOP"))));
+                "choices", List.of(Map.of(
+                        "message", Map.of("role", "assistant", "content", innerJson),
+                        "finish_reason", "stop")),
+                "usage", Map.of("prompt_tokens", 588, "completion_tokens", 243, "total_tokens", 831,
+                        "completion_tokens_details", Map.of("reasoning_tokens", 0))));
     }
 
     @Test
@@ -83,8 +87,8 @@ class GeminiReportGeneratorTest {
                  "insights":["수요일에 심박수가 높았어요","주말에 HRV가 올라갔어요"],
                  "advice":["발표 전 4-7-8 호흡"]}
                 """;
-        server.expect(requestTo(BASE_URL + "/models/" + MODEL + ":generateContent"))
-                .andExpect(method(org.springframework.http.HttpMethod.POST))
+        server.expect(requestTo(CHAT))
+                .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess(responseWith(inner), MediaType.APPLICATION_JSON));
 
         ReportContent content = generator.generate(input());
@@ -96,18 +100,20 @@ class GeminiReportGeneratorTest {
     }
 
     @Test
-    @DisplayName("요청에 출력 상한과 응답 스키마를 함께 실어 보낸다")
-    void sendsGenerationConfig() {
-        server.expect(requestTo(BASE_URL + "/models/" + MODEL + ":generateContent"))
-                .andExpect(jsonPath("$.generationConfig.maxOutputTokens").value(900))
-                .andExpect(jsonPath("$.generationConfig.responseMimeType").value("application/json"))
-                // 스키마를 못 박아야 필드 이름이 흔들리지 않는다
-                .andExpect(jsonPath("$.generationConfig.responseSchema.required").isArray())
-                .andExpect(jsonPath("$.generationConfig.responseSchema.properties.insights.type").value("ARRAY"))
-                // 생각 토큰이 켜져 있으면 출력 상한을 같이 깎아먹어 본문이 잘린다
-                .andExpect(jsonPath("$.generationConfig.thinkingConfig.thinkingBudget").value(0))
+    @DisplayName("요청에 출력 상한과 strict 스키마를 함께 실어 보낸다")
+    void sendsRequestShape() {
+        server.expect(requestTo(CHAT))
+                .andExpect(jsonPath("$.model").value(MODEL))
+                .andExpect(jsonPath("$.max_completion_tokens").value(900))
+                .andExpect(jsonPath("$.response_format.type").value("json_schema"))
+                .andExpect(jsonPath("$.response_format.json_schema.strict").value(true))
+                // strict 모드는 additionalProperties=false가 없으면 400을 낸다
+                .andExpect(jsonPath("$.response_format.json_schema.schema.additionalProperties").value(false))
                 // HRV 방향을 알려주는 시스템 지시가 빠지면 리포트가 거꾸로 해석한다
-                .andExpect(jsonPath("$.systemInstruction.parts[0].text").exists())
+                .andExpect(jsonPath("$.messages[0].role").value("system"))
+                .andExpect(jsonPath("$.messages[1].role").value("user"))
+                // 추론 계열 모델이 기본값 외 temperature를 거부한다. 아예 보내지 않는다
+                .andExpect(jsonPath("$.temperature").doesNotExist())
                 .andRespond(withSuccess(
                         responseWith("{\"summary\":\"s\",\"insights\":[],\"advice\":[]}"),
                         MediaType.APPLICATION_JSON));
@@ -119,8 +125,20 @@ class GeminiReportGeneratorTest {
     @Test
     @DisplayName("한도 초과(429)는 REPORT_UNAVAILABLE로 바뀐다")
     void quotaExceeded() {
-        server.expect(requestTo(BASE_URL + "/models/" + MODEL + ":generateContent"))
-                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+        // 공유 키라 다른 팀이 몰아 쓰면 우리도 여기로 떨어진다.
+        server.expect(requestTo(CHAT)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+
+        assertThatThrownBy(() -> generator.generate(input()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REPORT_UNAVAILABLE);
+    }
+
+    @Test
+    @DisplayName("키가 틀리면(401) REPORT_UNAVAILABLE로 바뀐다")
+    void unauthorized() {
+        // 다른 팀이 키를 회수·교체해도 앱이 500으로 무너지지 않아야 한다.
+        server.expect(requestTo(CHAT)).andRespond(withStatus(HttpStatus.UNAUTHORIZED));
 
         assertThatThrownBy(() -> generator.generate(input()))
                 .isInstanceOf(BusinessException.class)
@@ -131,8 +149,22 @@ class GeminiReportGeneratorTest {
     @Test
     @DisplayName("서버 오류도 REPORT_UNAVAILABLE로 바뀐다")
     void serverError() {
-        server.expect(requestTo(BASE_URL + "/models/" + MODEL + ":generateContent"))
-                .andRespond(withServerError());
+        server.expect(requestTo(CHAT)).andRespond(withServerError());
+
+        assertThatThrownBy(() -> generator.generate(input()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REPORT_UNAVAILABLE);
+    }
+
+    @Test
+    @DisplayName("생성을 거부하면 REPORT_UNAVAILABLE로 바뀐다")
+    void refusal() {
+        String body = mapper.writeValueAsString(Map.of(
+                "choices", List.of(Map.of(
+                        "message", Map.of("role", "assistant", "refusal", "거부 사유"),
+                        "finish_reason", "stop"))));
+        server.expect(requestTo(CHAT)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> generator.generate(input()))
                 .isInstanceOf(BusinessException.class)
@@ -142,9 +174,9 @@ class GeminiReportGeneratorTest {
 
     @Test
     @DisplayName("본문이 비어 오면 REPORT_UNAVAILABLE로 바뀐다")
-    void emptyCandidates() {
-        server.expect(requestTo(BASE_URL + "/models/" + MODEL + ":generateContent"))
-                .andRespond(withSuccess("{\"candidates\":[]}", MediaType.APPLICATION_JSON));
+    void emptyChoices() {
+        server.expect(requestTo(CHAT))
+                .andRespond(withSuccess("{\"choices\":[]}", MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> generator.generate(input()))
                 .isInstanceOf(BusinessException.class)
@@ -155,9 +187,8 @@ class GeminiReportGeneratorTest {
     @Test
     @DisplayName("토큰 상한에서 잘린 JSON도 500으로 새지 않는다")
     void truncatedJson() {
-        server.expect(requestTo(BASE_URL + "/models/" + MODEL + ":generateContent"))
-                .andRespond(withSuccess(
-                        responseWith("{\"summary\":\"잘린 문장"), MediaType.APPLICATION_JSON));
+        server.expect(requestTo(CHAT))
+                .andRespond(withSuccess(responseWith("{\"summary\":\"잘린 문장"), MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> generator.generate(input()))
                 .isInstanceOf(BusinessException.class)

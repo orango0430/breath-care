@@ -8,5 +8,15 @@ spring:
 
 firebase:
   enabled: true
-  # 배포 환경에서는 키 파일을 이미지에 넣지 말고 시크릿으로 마운트한 경로를 넣는다.
-  credentials-location: ${FIREBASE_CREDENTIALS}
+  # 어느 쪽이든 키를 이미지에 굽지는 않는다. 실행 시점에 주입한다.
+  #   - EC2/로컬: 파일을 볼륨으로 물리고 FIREBASE_CREDENTIALS에 경로
+  #   - Railway 등 PaaS: 파일을 둘 데가 없으므로 FIREBASE_CREDENTIALS_BASE64
+  # 기본값을 비워 둬야 안 쓰는 쪽이 "환경변수 없음"으로 기동을 막지 않는다.
+  credentials-location: ${FIREBASE_CREDENTIALS:}
+  credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
+
+logging:
+  level:
+    # 기본 설정(application.yml)은 DEBUG다. 프리티어 인스턴스는 디스크가 8GB뿐이라
+    # 요청마다 SQL까지 남기면 며칠 만에 다 찬다.
+    org.exaple.breath_care: INFO

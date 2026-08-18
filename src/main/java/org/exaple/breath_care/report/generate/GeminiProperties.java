@@ -3,25 +3,14 @@ package org.exaple.breath_care.report.generate;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Gemini 설정. 전부 application.yml의 {@code gemini.*}에서 온다.
+ * Gemini 설정. 출력 상한·타임아웃 같은 공통 항목은 {@link ReportProperties}에 있다.
  *
- * @param apiKey                  절대 커밋하지 않는다. 환경변수 GEMINI_API_KEY로만 주입한다
- * @param model                   모델 이름. 코드가 아니라 설정이라 갈아탈 때 재배포만 하면 된다
- * @param minMeasurements         이 수보다 측정이 적으면 호출하지 않고 막는다
- * @param regenerateCooldownHours 강제 재생성 최소 간격
- * @param maxOutputTokens         출력 상한. 길게 쓰라고 둘 이유가 없다
- * @param thinkingBudget          추론 모델의 생각 토큰 예산. 0이면 끔.
- *                                생각을 반드시 해야 하는 모델로 갈아타면 여기만 올리면 된다
+ * @param apiKey         절대 커밋하지 않는다. 환경변수 GEMINI_API_KEY로만 주입한다
+ * @param model          모델 이름. 버전을 박으면 썩는다.
+ *                       (gemini-2.0-flash는 사라졌고 gemini-2.5-flash는 신규 키로 404가 난다)
+ * @param thinkingBudget 추론 모델의 생각 토큰 예산. 0이면 끔.
+ *                       켜 두면 생각 토큰이 출력 상한을 같이 깎아먹어 본문이 잘린다
  */
 @ConfigurationProperties(prefix = "gemini")
-public record GeminiProperties(
-        boolean enabled,
-        String apiKey,
-        String model,
-        int minMeasurements,
-        int regenerateCooldownHours,
-        int maxOutputTokens,
-        int thinkingBudget,
-        int timeoutSeconds
-) {
+public record GeminiProperties(String apiKey, String model, int thinkingBudget) {
 }

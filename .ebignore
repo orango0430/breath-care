@@ -1,0 +1,40 @@
+# Elastic Beanstalk에 올릴 번들에서 뺄 것들.
+#
+# 주의: .ebignore가 있으면 EB CLI는 .gitignore를 아예 보지 않는다.
+# 그래서 커밋 금지 파일이라도 여기에 다시 적어야 한다. 안 적으면 번들에 실려 올라간다.
+
+### 이게 제일 중요하다 ###
+# 번들 최상위에 docker-compose.yml이 있으면 EB는 Docker Compose 모드로 전환한다.
+# 그러면 Dockerfile 대신 개발용 compose(MySQL 포함, 포트 3307)를 띄우려 하고
+# 배포가 통째로 어긋난다. 우리는 Dockerfile 단독 배포다.
+docker-compose.yml
+docker-compose.prod.yml
+
+### 비밀값 (절대 번들에 넣지 않는다) ###
+# EB에는 볼륨으로 파일을 물릴 자리가 없다. 전부 환경 속성으로 넣는다.
+.env
+.env.*
+firebase-service-account.json
+**/firebase-service-account*.json
+*-firebase-adminsdk-*.json
+google-services.json
+
+### 서버 이미지와 무관 ###
+frontend/
+build/
+out/
+bin/
+.gradle/
+.git/
+.idea/
+.vscode/
+*.iml
+
+### 문서·시안 ###
+*.md
+*.png
+*.docx
+rules.md
+
+### 지난 배포처 흔적 ###
+railway.json
