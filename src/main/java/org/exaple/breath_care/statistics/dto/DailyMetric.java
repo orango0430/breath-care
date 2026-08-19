@@ -12,7 +12,7 @@ public record DailyMetric(
         LocalDate date,
         Double hr,
         Double hrv,
-        Double stressScore,
+        Double conditionScore,
         int measurementCount
 ) {
     public static DailyMetric empty(LocalDate date) {

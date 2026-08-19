@@ -108,7 +108,7 @@ public class ReportService {
                 summary.measurementCount(),
                 summary.hr(),
                 summary.hrv(),
-                summary.stressScore(),
+                summary.conditionScore(),
                 statisticsService.daily(userId, range));
     }
 

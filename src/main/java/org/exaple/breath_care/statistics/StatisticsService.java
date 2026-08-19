@@ -47,7 +47,7 @@ public class StatisticsService {
                 measurements.size(),
                 MetricSummary.of(valuesOf(measurements, Measurement::getHr)),
                 MetricSummary.of(valuesOf(measurements, Measurement::getHrv)),
-                MetricSummary.of(valuesOf(measurements, Measurement::getStressScore)));
+                MetricSummary.of(valuesOf(measurements, Measurement::getConditionScore)));
     }
 
     @Transactional(readOnly = true)
@@ -74,7 +74,7 @@ public class StatisticsService {
                 date,
                 MetricSummary.of(valuesOf(measurements, Measurement::getHr)).avg(),
                 MetricSummary.of(valuesOf(measurements, Measurement::getHrv)).avg(),
-                MetricSummary.of(valuesOf(measurements, Measurement::getStressScore)).avg(),
+                MetricSummary.of(valuesOf(measurements, Measurement::getConditionScore)).avg(),
                 measurements.size());
     }
 
