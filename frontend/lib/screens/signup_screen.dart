@@ -30,31 +30,52 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
+  final RegExp _emailRegExp = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.coralRed,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _onSignupPressed() {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
-    final name = _nameController.text.trim();
+    final nickname = _nameController.text.trim();
 
-    if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty || name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('모든 회원가입 정보를 입력해 주세요.'),
-          backgroundColor: AppColors.coralRed,
-          duration: Duration(seconds: 2),
-        ),
-      );
+    if (nickname.isEmpty) {
+      _showError('이름(닉네임)을 입력해 주세요.');
+      return;
+    }
+
+    if (email.isEmpty) {
+      _showError('이메일을 입력해 주세요.');
+      return;
+    }
+
+    if (!_emailRegExp.hasMatch(email)) {
+      _showError('유효한 이메일 형식을 입력해 주세요.');
+      return;
+    }
+
+    if (password.isEmpty) {
+      _showError('비밀번호를 입력해 주세요.');
+      return;
+    }
+
+    if (password.length < 8 || password.length > 64) {
+      _showError('비밀번호는 8자 이상 64자 이하로 입력해 주세요.');
       return;
     }
 
     if (password != confirmPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('비밀번호가 일치하지 않습니다.'),
-          backgroundColor: AppColors.coralRed,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      _showError('비밀번호가 일치하지 않습니다.');
       return;
     }
 

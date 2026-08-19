@@ -67,3 +67,5 @@ app.*.map.json
 # Workspace / Agent specific
 .agents/
 
+# Windows related
+windows/flutter/ephemeral/
