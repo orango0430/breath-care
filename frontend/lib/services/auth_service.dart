@@ -1,5 +1,6 @@
 import '../models/user.dart';
 import 'api_client.dart';
+import 'push_service.dart';
 
 /// Signup, login, logout.
 ///
@@ -40,6 +41,10 @@ class AuthService {
     }) as Map<String, dynamic>;
 
     await _client.setToken(data['accessToken'] as String);
+    // Registering here rather than in the screens means every way into the app
+    // — email, Google, both — leaves the device able to receive reminders.
+    // It swallows its own failures, so a refused permission cannot block login.
+    await PushService.instance.register();
     return User.fromJson(data['user'] as Map<String, dynamic>);
   }
 
@@ -50,6 +55,10 @@ class AuthService {
         .post('/api/auth/social', body: {'idToken': idToken}) as Map<String, dynamic>;
 
     await _client.setToken(data['accessToken'] as String);
+    // Registering here rather than in the screens means every way into the app
+    // — email, Google, both — leaves the device able to receive reminders.
+    // It swallows its own failures, so a refused permission cannot block login.
+    await PushService.instance.register();
     return User.fromJson(data['user'] as Map<String, dynamic>);
   }
 

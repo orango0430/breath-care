@@ -3,6 +3,9 @@
          the debug and profile manifests, so without this line the release APK
          cannot reach the network at all. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Runtime permission from Android 13. Without it FCM messages arrive but
+         are never shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FLASHLIGHT" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
