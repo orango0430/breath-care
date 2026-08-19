@@ -1,0 +1,7 @@
+# Tests tagged `e2e` talk to a real server and create an account on it, so they
+# stay out of the default run. Ask for them explicitly:
+#
+#   flutter test --tags e2e
+tags:
+  e2e:
+    skip: "네트워크가 필요하다. 'flutter test --tags e2e' 로 직접 실행한다"

@@ -3,9 +3,13 @@ import 'package:flutter/cupertino.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_text_styles.dart';
 import 'screens/splash_screen.dart';
+import 'services/api_client.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Restore the saved token before the first frame, so a returning user goes
+  // straight to home instead of flashing the login screen on every launch.
+  await ApiClient.instance.restoreSession();
   runApp(const BreathCareApp());
 }
 

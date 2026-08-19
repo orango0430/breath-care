@@ -134,6 +134,39 @@ class PpgSensorService {
   final List<double> _rrIntervalsMs = [];
   Timer? _simulationTimer;
 
+  /// Every avgY sample taken while a finger was on the lens, in order.
+  ///
+  /// This is what gets uploaded — the server derives heart rate and HRV from
+  /// it. Keep it raw: no smoothing, no trimming. The server's filter expects
+  /// the untouched signal, and the stored copy is what we replay later when
+  /// tuning the algorithm.
+  final List<double> _waveform = [];
+  DateTime? _captureStartedAt;
+  DateTime? _captureEndedAt;
+
+  /// The samples to upload. Empty until a finger is detected.
+  List<double> get waveform => List.unmodifiable(_waveform);
+
+  /// Wall-clock seconds spanned by [waveform].
+  int get capturedDurationSec {
+    final start = _captureStartedAt;
+    final end = _captureEndedAt ?? DateTime.now();
+    if (start == null) return 0;
+    return end.difference(start).inMilliseconds ~/ 1000;
+  }
+
+  /// Frames actually delivered per second, measured rather than assumed.
+  ///
+  /// The camera does not honour a requested rate — it drops frames under load
+  /// and slows down in dim light. Sending a nominal 30 when the real rate was
+  /// 22 would stretch every interval the server computes and skew the heart
+  /// rate by the same ratio.
+  int get capturedFps {
+    final seconds = capturedDurationSec;
+    if (seconds <= 0 || _waveform.isEmpty) return 30;
+    return (_waveform.length / seconds).round().clamp(10, 240);
+  }
+
   bool get isCameraAvailable => _isCameraAvailable;
 
   Future<void> initializeCamera() async {
@@ -145,6 +178,9 @@ class PpgSensorService {
     _peakTimestamps.clear();
     _rrIntervalsMs.clear();
     _yHistory.clear();
+    _waveform.clear();
+    _captureStartedAt = null;
+    _captureEndedAt = null;
     _prevY = 0.0;
     _prevPrevY = 0.0;
 
@@ -273,6 +309,14 @@ class PpgSensorService {
     if (isFingerDetected && !_ppgValueController.isClosed && !_isDisposed) {
       final now = DateTime.now();
       _ppgValueController.add(avgY);
+
+      _captureStartedAt ??= now;
+      _captureEndedAt = now;
+      // The server rejects anything past 30,000 samples, so stop growing at the
+      // cap instead of building a request that is guaranteed to be refused.
+      if (_waveform.length < 30000) {
+        _waveform.add(avgY);
+      }
 
       // Track moving average of avgY
       _yHistory.add(avgY);
