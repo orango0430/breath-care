@@ -30,7 +30,7 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  final RegExp _emailRegExp = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+  final RegExp _emailRegExp = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
   void _showError(String message) {
     if (!mounted) return;

@@ -24,7 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  final RegExp _emailRegExp = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+  final RegExp _emailRegExp = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
   void _showError(String message) {
     if (!mounted) return;
@@ -53,17 +53,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (password.isEmpty) {
       _showError('비밀번호를 입력해 주세요.');
-      return;
-    }
-
-    if (password.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('비밀번호는 최소 8자 이상이어야 합니다.'),
-          backgroundColor: AppColors.coralRed,
-          duration: Duration(seconds: 2),
-        ),
-      );
       return;
     }
 
