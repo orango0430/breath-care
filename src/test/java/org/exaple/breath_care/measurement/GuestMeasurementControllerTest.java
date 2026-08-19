@@ -1,5 +1,6 @@
 package org.exaple.breath_care.measurement;
 
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,8 +10,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -19,7 +18,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 비회원 측정. 로그인 없이 계산만 받아 가고 서버에는 아무것도 남기지 않는다.
- * 신호처리가 스텁이라 심박수·HRV는 고정값으로 나온다.
+ *
+ * <p>파형은 {@link PpgWaveforms}가 72bpm으로 만든다. 값을 정확한 숫자로 못 박지 않고
+ * 범위로 두는 이유는, 신호처리 상수가 실측 데이터로 조정될 예정이라 정확한 값이 조금씩
+ * 움직이기 때문이다. 여기서 확인할 것은 <b>API가 제대로 된 응답을 내는가</b>이고,
+ * 알고리즘의 정확성은 {@code PpgSignalProcessorTest}가 본다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -28,9 +31,6 @@ class GuestMeasurementControllerTest {
 
     private static final String ANALYZE = "/api/measurements/analyze";
 
-    /** 스텁의 SDNN 32.0 → 32.0 × 1.4 + 40 = 84.8 */
-    private static final double STUB_CONDITION_SCORE = 84.8;
-
     @Autowired
     MockMvc mockMvc;
     @Autowired
@@ -38,26 +38,17 @@ class GuestMeasurementControllerTest {
     @Autowired
     MeasurementSignalRepository signalRepository;
 
-    /** fps 30으로 frameCount 개의 파형을 만든다. */
-    private String requestBody(int durationSec, int frameCount) {
-        String samples = IntStream.range(0, frameCount)
-                .mapToObj(i -> String.valueOf(120.0 + (i % 10) * 0.5))
-                .collect(Collectors.joining(","));
-
-        return """
-                {"samples":[%s],"fps":30,"durationSec":%d}
-                """.formatted(samples, durationSec);
-    }
-
     @Test
     @DisplayName("토큰 없이도 측정 결과를 받는다")
     void worksWithoutToken() throws Exception {
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800)))
+                        .content(PpgWaveforms.requestBody()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.hr").value(72.0))
-                .andExpect(jsonPath("$.data.hrv").value(35.0))
+                // 72bpm으로 만든 파형이다
+                .andExpect(jsonPath("$.data.hr",
+                        Matchers.closeTo(72.0, 3.0)))
+                .andExpect(jsonPath("$.data.hrv").isNumber())
                 .andExpect(jsonPath("$.data.quality").value("GOOD"))
                 .andExpect(jsonPath("$.data.measuredAt").isNotEmpty())
                 // 저장하지 않았으니 가리킬 id가 없다
@@ -76,9 +67,13 @@ class GuestMeasurementControllerTest {
     void conditionScoreOnFirstMeasurement() throws Exception {
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800)))
+                        .content(PpgWaveforms.requestBody()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.conditionScore").value(STUB_CONDITION_SCORE));
+                .andExpect(jsonPath("$.data.conditionScore").isNumber())
+                .andExpect(jsonPath("$.data.conditionScore",
+                        Matchers.allOf(
+                                Matchers.greaterThanOrEqualTo(50.0),
+                                Matchers.lessThanOrEqualTo(96.0))));
     }
 
     @Test
@@ -89,7 +84,7 @@ class GuestMeasurementControllerTest {
 
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800)))
+                        .content(PpgWaveforms.requestBody()))
                 .andExpect(status().isOk());
 
         assertThat(measurementRepository.count()).isEqualTo(measurementsBefore);
@@ -98,23 +93,20 @@ class GuestMeasurementControllerTest {
 
     /**
      * V14에서 요청의 recentHrs를 걷어냈다. 이미 배포된 앱이 그 필드를 계속 보내도
-     * 400으로 튕기면 안 된다. 스프링 부트가 모르는 필드를 무시하도록 설정해 두는 데 기대고 있어서,
-     * 그 설정이 바뀌면 여기서 먼저 걸린다.
+     * 400으로 튕기면 안 된다. 스프링 부트가 모르는 필드를 무시하도록 설정해 두는 데
+     * 기대고 있어서, 그 설정이 바뀌면 여기서 먼저 걸린다.
      */
     @Test
     @DisplayName("예전 앱이 recentHrs를 보내도 무시하고 정상 처리한다")
     void ignoresRemovedRecentHrsField() throws Exception {
-        String samples = IntStream.range(0, 1800)
-                .mapToObj(i -> String.valueOf(120.0 + (i % 10) * 0.5))
-                .collect(Collectors.joining(","));
+        String body = PpgWaveforms.requestBody().trim();
+        String withExtraField = body.substring(0, body.length() - 1) + ",\"recentHrs\":[70.0,71.0]}";
 
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"samples":[%s],"fps":30,"durationSec":60,"recentHrs":[70.0,71.0]}
-                                """.formatted(samples)))
+                        .content(withExtraField))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.conditionScore").value(STUB_CONDITION_SCORE));
+                .andExpect(jsonPath("$.data.conditionScore").isNumber());
     }
 
     @Test
@@ -122,7 +114,17 @@ class GuestMeasurementControllerTest {
     void rejectsDroppedFrames() throws Exception {
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 500)))
+                        .content(PpgWaveforms.droppedFrameBody(60, 30, 500)))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.error.code").value("POOR_SIGNAL_QUALITY"));
+    }
+
+    @Test
+    @DisplayName("손가락을 대지 않은 평평한 신호는 422")
+    void rejectsFlatSignal() throws Exception {
+        mockMvc.perform(post(ANALYZE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(PpgWaveforms.flatBody(60, 30)))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("POOR_SIGNAL_QUALITY"));
     }
@@ -133,7 +135,7 @@ class GuestMeasurementControllerTest {
         // 같은 prefix의 저장용 엔드포인트는 여전히 토큰을 요구한다
         mockMvc.perform(post("/api/measurements")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800)))
+                        .content(PpgWaveforms.requestBody()))
                 .andExpect(status().isUnauthorized());
     }
 }

@@ -11,8 +11,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -60,15 +58,12 @@ class MeasurementControllerTest {
         token = body.substring(start, body.indexOf('"', start));
     }
 
-    /** fps 30으로 durationSec 초만큼의 파형을 만든다. */
-    private String requestBody(int durationSec, int frameCount) {
-        String samples = IntStream.range(0, frameCount)
-                .mapToObj(i -> String.valueOf(120.0 + (i % 10) * 0.5))
-                .collect(Collectors.joining(","));
-
-        return """
-                {"samples":[%s],"fps":30,"durationSec":%d}
-                """.formatted(samples, durationSec);
+    /**
+     * 파형은 {@link PpgWaveforms}가 만든다. 신호처리가 진짜로 돌기 때문에 아무 값이나
+     * 보내면 심박수가 안 나오거나 품질 게이트에 걸린다.
+     */
+    private String requestBody() {
+        return PpgWaveforms.requestBody();
     }
 
     @Test
@@ -77,10 +72,12 @@ class MeasurementControllerTest {
         mockMvc.perform(post(MEASUREMENTS)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800)))
+                        .content(requestBody()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.id").isNumber())
-                .andExpect(jsonPath("$.data.hr").isNumber())
+                // 72bpm으로 만든 파형이다. 신호처리가 그걸 되찾아야 한다
+                .andExpect(jsonPath("$.data.hr",
+                        org.hamcrest.Matchers.closeTo(72.0, 3.0)))
                 .andExpect(jsonPath("$.data.hrv").isNumber())
                 .andExpect(jsonPath("$.data.quality").value("GOOD"))
                 .andExpect(jsonPath("$.data.measuredAt").isNotEmpty())
@@ -89,12 +86,23 @@ class MeasurementControllerTest {
     }
 
     @Test
+    @DisplayName("맥동이 없는 평평한 신호는 422 — 손가락을 안 댄 경우다")
+    void rejectsFlatSignal() throws Exception {
+        mockMvc.perform(post(MEASUREMENTS)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(PpgWaveforms.flatBody(60, 30)))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.error.code").value("POOR_SIGNAL_QUALITY"));
+    }
+
+    @Test
     @DisplayName("원시 파형을 함께 저장한다 (나중에 알고리즘 재검증에 쓴다)")
     void storesRawSignal() throws Exception {
         mockMvc.perform(post(MEASUREMENTS)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800)))
+                        .content(requestBody()))
                 .andExpect(status().isCreated());
 
         assertThat(signalRepository.findAll()).hasSize(1);
@@ -111,7 +119,7 @@ class MeasurementControllerTest {
         mockMvc.perform(post(MEASUREMENTS)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 500)))
+                        .content(PpgWaveforms.droppedFrameBody(60, 30, 500)))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("POOR_SIGNAL_QUALITY"));
     }
@@ -122,7 +130,7 @@ class MeasurementControllerTest {
         mockMvc.perform(post(MEASUREMENTS)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(15, 450)))
+                        .content(PpgWaveforms.requestBody(15, 30)))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("POOR_SIGNAL_QUALITY"));
     }
@@ -158,7 +166,7 @@ class MeasurementControllerTest {
     void requiresAuth() throws Exception {
         mockMvc.perform(post(MEASUREMENTS)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800)))
+                        .content(requestBody()))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -166,9 +174,9 @@ class MeasurementControllerTest {
     @DisplayName("측정 이력을 최신순으로 조회한다")
     void findHistory() throws Exception {
         mockMvc.perform(post(MEASUREMENTS).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON).content(requestBody(60, 1800)));
+                .contentType(MediaType.APPLICATION_JSON).content(requestBody()));
         mockMvc.perform(post(MEASUREMENTS).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON).content(requestBody(60, 1800)));
+                .contentType(MediaType.APPLICATION_JSON).content(requestBody()));
 
         mockMvc.perform(get(MEASUREMENTS).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
@@ -179,7 +187,7 @@ class MeasurementControllerTest {
     @DisplayName("남의 측정은 이력에 섞이지 않는다")
     void historyIsScopedToUser() throws Exception {
         mockMvc.perform(post(MEASUREMENTS).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON).content(requestBody(60, 1800)));
+                .contentType(MediaType.APPLICATION_JSON).content(requestBody()));
 
         mockMvc.perform(post("/api/auth/signup").contentType(MediaType.APPLICATION_JSON)
                 .content("""
