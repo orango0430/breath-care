@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../widgets/bpace_logo.dart';
+import '../services/api_client.dart';
 import 'onboarding_screen.dart';
 import 'home_screen.dart';
+import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -49,11 +51,15 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
-    Widget targetScreen;
+    // main() already restored any saved token, so this is just a read.
+    final Widget targetScreen;
     if (!hasSeenOnboarding) {
       targetScreen = const OnboardingScreen();
-    } else {
+    } else if (ApiClient.instance.isLoggedIn) {
       targetScreen = const HomeScreen();
+    } else {
+      // Signed out, or the token was dropped after the server rejected it.
+      targetScreen = const LoginScreen();
     }
 
     Navigator.of(context).pushReplacement(

@@ -3,6 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
+import '../services/api_exception.dart';
+import '../services/auth_service.dart';
+import 'home_screen.dart';
 
 /// Sign Up Screen (회원가입 페이지 matching screenshot)
 class SignupScreen extends StatefulWidget {
@@ -17,6 +20,10 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
+
+  /// Blocks a second tap while the request is in flight — a double tap would
+  /// otherwise try to create the account twice and fail on DUPLICATE_EMAIL.
+  bool _isSubmitting = false;
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -43,7 +50,9 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  void _onSignupPressed() {
+  Future<void> _onSignupPressed() async {
+    if (_isSubmitting) return;
+
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
@@ -79,14 +88,32 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('회원가입이 성공적으로 완료되었습니다!'),
-        backgroundColor: AppColors.lightMint,
-        duration: Duration(seconds: 2),
-      ),
-    );
-    Navigator.of(context).pop();
+    setState(() => _isSubmitting = true);
+    try {
+      await AuthService.instance
+          .signup(email: email, password: password, nickname: nickname);
+      // Signup does not return a token, so log in with the same credentials
+      // rather than making the user type them a second time.
+      await AuthService.instance.login(email: email, password: password);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('회원가입이 성공적으로 완료되었습니다!'),
+          backgroundColor: AppColors.lightMint,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false,
+      );
+    } on ApiException catch (e) {
+      // DUPLICATE_EMAIL lands here with the server's own wording.
+      _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -210,16 +237,25 @@ class _SignupScreenState extends State<SignupScreen> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(29),
                           ),
-                          child: const Center(
-                            child: Text(
-                              '회원가입',
-                              style: TextStyle(
-                                fontFamily: AppFonts.pretendard,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E1E20),
-                              ),
-                            ),
+                          child: Center(
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.4,
+                                      color: Color(0xFF1E1E20),
+                                    ),
+                                  )
+                                : const Text(
+                                    '회원가입',
+                                    style: TextStyle(
+                                      fontFamily: AppFonts.pretendard,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1E1E20),
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
