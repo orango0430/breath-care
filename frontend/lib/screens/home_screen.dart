@@ -83,7 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Main Scrollable Content (switches between Home ritual view and Breath management view)
               _selectedNavIndex == 2
                   ? const Padding(
-                      padding: EdgeInsets.only(bottom: 80.0),
+                      padding: EdgeInsets.only(top: 12.0, bottom: 90.0),
                       child: RecommendedBreathingScreen(),
                     )
                   : SingleChildScrollView(
@@ -689,7 +689,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBottomFloatingNav() {
     return Row(
       children: [
-        // "Ritual" Circular Quick Action Button
+        // 1. Ritual Circular Active/Quick Action Button
         GestureDetector(
           onTap: () {
             Navigator.of(context).push(
@@ -699,15 +699,15 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           },
           child: Container(
-            width: 58,
-            height: 58,
+            width: 60,
+            height: 60,
             decoration: const BoxDecoration(
-              color: AppColors.lightMint,
+              color: Color(0xFFD6F5BD),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Color(0x4DE2FFDA),
-                  blurRadius: 10,
+                  color: Color(0x33D6F5BD),
+                  blurRadius: 12,
                   offset: Offset(0, 4),
                 ),
               ],
@@ -720,13 +720,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: AppColors.darkBg,
                   size: 22,
                 ),
-                SizedBox(height: 1),
+                SizedBox(height: 2),
                 Text(
                   'Ritual',
                   style: TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 10,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.darkBg,
                   ),
                 ),
@@ -736,16 +736,16 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(width: 10),
 
-        // Main Navigation Bar Container
+        // 2. Main Navigation Bar Capsule Container
         Expanded(
           child: Container(
-            height: 58,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            height: 60,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.darkCharcoal,
+              color: const Color(0xFF222325).withAlpha(235),
               borderRadius: BorderRadius.circular(30),
               border: Border.all(
-                color: AppColors.slateDarkGray.withAlpha(100),
+                color: Colors.white.withAlpha(25),
                 width: 1,
               ),
             ),
@@ -754,17 +754,20 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildNavItem(
                   index: 0,
-                  icon: Icons.home_rounded,
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home_rounded,
                   label: 'Home',
                 ),
                 _buildNavItem(
                   index: 1,
-                  icon: Icons.calendar_today_rounded,
-                  label: 'History',
+                  icon: Icons.calendar_today_outlined,
+                  activeIcon: Icons.calendar_today_rounded,
+                  label: 'Log',
                 ),
                 _buildNavItem(
                   index: 2,
                   icon: Icons.air_rounded,
+                  activeIcon: Icons.air_rounded,
                   label: 'Breath',
                 ),
               ],
@@ -796,10 +799,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Single Nav Tab Item
+  /// Single Nav Tab Item (Aligned vertically with Icon + Label)
   Widget _buildNavItem({
     required int index,
     required IconData icon,
+    required IconData activeIcon,
     required String label,
   }) {
     final isSelected = _selectedNavIndex == index;
@@ -810,33 +814,32 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: const Duration(milliseconds: 200),
         padding: EdgeInsets.symmetric(
           horizontal: isSelected ? 18 : 12,
-          vertical: 6,
+          vertical: 4,
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.slateDarkGray.withAlpha(128)
+              ? const Color(0xFF33353A)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Row(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              icon,
+              isSelected ? activeIcon : icon,
               color: isSelected ? AppColors.white : AppColors.slateGray,
               size: 20,
             ),
-            if (isSelected) ...[
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.white,
-                ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: AppFonts.pretendard,
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected ? AppColors.white : AppColors.slateGray,
               ),
-            ],
+            ),
           ],
         ),
       ),

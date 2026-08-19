@@ -20,8 +20,11 @@ class MeasurementResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeResult = result ?? PpgMeasurementResult.defaultSample();
-    final activeRoutine =
-        routine ?? BreathingRoutineModel.fromHrv(activeResult.hrvSdnnMs);
+    final activeRoutine = routine ??
+        BreathingRoutineModel.fromMeasurement(
+          bpm: activeResult.bpm,
+          hrvSdnn: activeResult.hrvSdnnMs,
+        );
     final conditionScore =
         (activeResult.hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
 
@@ -72,7 +75,7 @@ class MeasurementResultScreen extends StatelessWidget {
                       const SizedBox(height: 24),
 
                       // 4. AI Analysis Card
-                      _buildAiAnalysisSection(conditionScore, activeRoutine),
+                      _buildAiAnalysisSection(conditionScore, activeRoutine, activeResult),
                       const SizedBox(height: 28),
 
                       // 5. "맞춤 호흡 시작하기" Full CTA Button
@@ -88,6 +91,7 @@ class MeasurementResultScreen extends StatelessWidget {
                                   routineModel: activeRoutine,
                                   initialInhaleSec: activeResult.measuredInhaleSec,
                                   initialExhaleSec: activeResult.measuredExhaleSec,
+                                  isAdaptiveRamp: true, // 측정 결과 화면에서 진입 시 내 측정 호흡에서 60초간 점진 유도 (Ramp)!
                                 ),
                               ),
                             );
@@ -562,7 +566,10 @@ class MeasurementResultScreen extends StatelessWidget {
   }
 
   /// 4. AI Analysis Card
-  Widget _buildAiAnalysisSection(int score, BreathingRoutineModel routine) {
+  Widget _buildAiAnalysisSection(int score, BreathingRoutineModel routine, PpgMeasurementResult res) {
+    final inhaleStr = res.measuredInhaleSec.toStringAsFixed(1);
+    final exhaleStr = res.measuredExhaleSec.toStringAsFixed(1);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -610,6 +617,40 @@ class MeasurementResultScreen extends StatelessWidget {
                   fontWeight: FontWeight.w400,
                   color: AppColors.lightGray,
                   height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.lightMint.withAlpha(20),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.lightMint.withAlpha(60),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: AppColors.lightMint,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '측정된 호흡(들숨 ${inhaleStr}초 / 날숨 ${exhaleStr}초)에서 시작하여 1분 30초간 ${routine.title} 목표 템포로 부드럽게 맞춤 조율됩니다.',
+                        style: const TextStyle(
+                          fontFamily: AppFonts.pretendard,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.lightMint,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

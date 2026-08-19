@@ -16,6 +16,7 @@ dependencies:
   camera: 0.10.5+9
   permission_handler: 11.3.1
   http: ^1.2.0
+  audioplayers: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -28,6 +29,7 @@ flutter:
   assets:
     - assets/fonts/
     - assets/images/
+    - assets/audio/
 
   fonts:
     - family: Pretendard
