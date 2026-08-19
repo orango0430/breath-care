@@ -18,7 +18,7 @@ public record ReportInput(
         int measurementCount,
         MetricSummary hr,
         MetricSummary hrv,
-        MetricSummary stressScore,
+        MetricSummary conditionScore,
         List<DailyMetric> daily
 ) {
 }

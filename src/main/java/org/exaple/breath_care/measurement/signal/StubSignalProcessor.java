@@ -21,17 +21,25 @@ public class StubSignalProcessor implements SignalProcessor {
     private static final int MIN_DURATION_SEC = 20;
 
     private static final double STUB_HR = 72.0;
-    private static final double STUB_HRV = 35.0;
+
+    /** RMSSD(ms). 화면에 HRV로 나가는 값이다. */
+    private static final double STUB_HRV_RMSSD = 35.0;
+
+    /**
+     * SDNN(ms). 컨디션 지수의 입력이다.
+     * 85점 근처가 나오도록 골랐다. 상한 96에 붙어 있으면 클램핑에 걸린 건지 알 수 없다.
+     */
+    private static final double STUB_HRV_SDNN = 32.0;
 
     /**
      * 경고는 기동할 때 한 번만 남긴다.
      *
      * <p>요청마다 WARN을 찍던 걸 옮긴 것이다. 비회원 측정은 인증 없이 열려 있어서
      * 행사처럼 사람이 몰리면 초당 수천 줄이 쌓인다. 부하 테스트에서 실제로 확인했다.
-     * 경고 자체는 남겨야 한다 — 스텁인 걸 모르고 배포하는 게 더 위험하다.
+     * 경고 자체는 남겨야 한다 - 스텁인 걸 모르고 배포하는 게 더 위험하다.
      */
     public StubSignalProcessor() {
-        log.warn("신호처리가 아직 스텁입니다. 심박수·HRV는 고정값으로 나갑니다.");
+        log.warn("신호처리가 아직 스텁입니다. 심박수·HRV·컨디션 지수는 고정값으로 나갑니다.");
     }
 
     @Override
@@ -42,6 +50,6 @@ public class StubSignalProcessor implements SignalProcessor {
             return SignalResult.poor();
         }
 
-        return new SignalResult(STUB_HR, STUB_HRV, MeasurementQuality.GOOD);
+        return new SignalResult(STUB_HR, STUB_HRV_RMSSD, STUB_HRV_SDNN, MeasurementQuality.GOOD);
     }
 }

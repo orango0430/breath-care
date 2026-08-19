@@ -9,8 +9,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -21,7 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 비회원 측정. 로그인 없이 계산만 받아 가고 서버에는 아무것도 남기지 않는다.
- * 신호처리가 스텁이라 심박수는 항상 72로 고정된다. 점수는 과거 심박수로만 움직인다.
+ * 신호처리가 스텁이라 심박수·HRV는 고정값으로 나온다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -30,6 +28,9 @@ class GuestMeasurementControllerTest {
 
     private static final String ANALYZE = "/api/measurements/analyze";
 
+    /** 스텁의 SDNN 32.0 → 32.0 × 1.4 + 40 = 84.8 */
+    private static final double STUB_CONDITION_SCORE = 84.8;
+
     @Autowired
     MockMvc mockMvc;
     @Autowired
@@ -37,15 +38,15 @@ class GuestMeasurementControllerTest {
     @Autowired
     MeasurementSignalRepository signalRepository;
 
-    /** fps 30으로 frameCount 개의 파형을 만든다. recentHrs는 JSON 조각으로 그대로 끼운다. */
-    private String requestBody(int durationSec, int frameCount, String recentHrs) {
+    /** fps 30으로 frameCount 개의 파형을 만든다. */
+    private String requestBody(int durationSec, int frameCount) {
         String samples = IntStream.range(0, frameCount)
                 .mapToObj(i -> String.valueOf(120.0 + (i % 10) * 0.5))
                 .collect(Collectors.joining(","));
 
         return """
-                {"samples":[%s],"fps":30,"durationSec":%d,"recentHrs":%s}
-                """.formatted(samples, durationSec, recentHrs);
+                {"samples":[%s],"fps":30,"durationSec":%d}
+                """.formatted(samples, durationSec);
     }
 
     @Test
@@ -53,7 +54,7 @@ class GuestMeasurementControllerTest {
     void worksWithoutToken() throws Exception {
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800, "[]")))
+                        .content(requestBody(60, 1800)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.hr").value(72.0))
                 .andExpect(jsonPath("$.data.hrv").value(35.0))
@@ -61,6 +62,23 @@ class GuestMeasurementControllerTest {
                 .andExpect(jsonPath("$.data.measuredAt").isNotEmpty())
                 // 저장하지 않았으니 가리킬 id가 없다
                 .andExpect(jsonPath("$.data.id").doesNotExist());
+    }
+
+    /**
+     * 이 테스트가 V14의 핵심이다.
+     *
+     * <p>이전 지표(스트레스 지수)는 개인 기준선을 만들려고 과거 측정 5회를 요구했다.
+     * 행사에서 한 번씩 측정하는 사람에게는 영영 null이었다. 컨디션 지수는 이번 측정의
+     * HRV만으로 나오므로 <b>이력이 하나도 없어도 첫 측정부터 숫자가 나온다.</b>
+     */
+    @Test
+    @DisplayName("이력이 없어도 첫 측정부터 컨디션 지수가 나온다")
+    void conditionScoreOnFirstMeasurement() throws Exception {
+        mockMvc.perform(post(ANALYZE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody(60, 1800)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.conditionScore").value(STUB_CONDITION_SCORE));
     }
 
     @Test
@@ -71,71 +89,32 @@ class GuestMeasurementControllerTest {
 
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800, "[70.0,71.0,69.0,72.0,70.0]")))
+                        .content(requestBody(60, 1800)))
                 .andExpect(status().isOk());
 
         assertThat(measurementRepository.count()).isEqualTo(measurementsBefore);
         assertThat(signalRepository.count()).isEqualTo(signalsBefore);
     }
 
+    /**
+     * V14에서 요청의 recentHrs를 걷어냈다. 이미 배포된 앱이 그 필드를 계속 보내도
+     * 400으로 튕기면 안 된다. 스프링 부트가 모르는 필드를 무시하도록 설정해 두는 데 기대고 있어서,
+     * 그 설정이 바뀌면 여기서 먼저 걸린다.
+     */
     @Test
-    @DisplayName("과거 심박수가 5개 미만이면 점수를 내지 않고 남은 횟수를 알려준다")
-    void withoutEnoughHistory() throws Exception {
-        mockMvc.perform(post(ANALYZE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800, "[70.0,71.0,69.0,72.0]")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.stressScore").doesNotExist())
-                .andExpect(jsonPath("$.data.baseline.ready").value(false))
-                .andExpect(jsonPath("$.data.baseline.sampleCount").value(4))
-                .andExpect(jsonPath("$.data.baseline.remainingSamples").value(1));
-    }
+    @DisplayName("예전 앱이 recentHrs를 보내도 무시하고 정상 처리한다")
+    void ignoresRemovedRecentHrsField() throws Exception {
+        String samples = IntStream.range(0, 1800)
+                .mapToObj(i -> String.valueOf(120.0 + (i % 10) * 0.5))
+                .collect(Collectors.joining(","));
 
-    @Test
-    @DisplayName("과거 심박수를 아예 안 보내도 400이 아니라 점수만 비워서 준다")
-    void recentHrsIsOptional() throws Exception {
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"samples":[%s],"fps":30,"durationSec":60}
-                                """.formatted(IntStream.range(0, 1800)
-                                .mapToObj(i -> "120.0").collect(Collectors.joining(",")))))
+                                {"samples":[%s],"fps":30,"durationSec":60,"recentHrs":[70.0,71.0]}
+                                """.formatted(samples)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.hr").value(72.0))
-                .andExpect(jsonPath("$.data.stressScore").doesNotExist())
-                .andExpect(jsonPath("$.data.baseline.ready").value(false));
-    }
-
-    /**
-     * 점수를 숫자로 꺼낸다. JSONPath 매처는 크기에 따라 Double과 BigDecimal을 오가서
-     * 부등호 비교에 그대로 쓸 수 없다.
-     */
-    private double stressScoreOf(String recentHrs) throws Exception {
-        String body = mockMvc.perform(post(ANALYZE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800, recentHrs)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.baseline.ready").value(true))
-                .andReturn().getResponse().getContentAsString();
-
-        Matcher matcher = Pattern.compile("\"stressScore\":([0-9.eE+-]+)").matcher(body);
-        assertThat(matcher.find()).as("응답에 stressScore가 있어야 한다").isTrue();
-
-        return Double.parseDouble(matcher.group(1));
-    }
-
-    @Test
-    @DisplayName("평소보다 심박수가 높으면 점수가 높게 나온다")
-    void higherThanUsualScoresHigh() throws Exception {
-        // 평소 60대인 사람의 72 → 기준선보다 한참 위
-        assertThat(stressScoreOf("[58.0,60.0,62.0,59.0,61.0]")).isGreaterThan(90.0);
-    }
-
-    @Test
-    @DisplayName("평소보다 심박수가 낮으면 점수가 낮게 나온다")
-    void lowerThanUsualScoresLow() throws Exception {
-        // 평소 80대인 사람의 72 → 기준선보다 아래
-        assertThat(stressScoreOf("[84.0,86.0,85.0,87.0,83.0]")).isLessThan(10.0);
+                .andExpect(jsonPath("$.data.conditionScore").value(STUB_CONDITION_SCORE));
     }
 
     @Test
@@ -143,19 +122,9 @@ class GuestMeasurementControllerTest {
     void rejectsDroppedFrames() throws Exception {
         mockMvc.perform(post(ANALYZE)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 500, "[]")))
+                        .content(requestBody(60, 500)))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("POOR_SIGNAL_QUALITY"));
-    }
-
-    @Test
-    @DisplayName("말이 안 되는 심박수가 섞이면 400 — 기준선이 통째로 망가진다")
-    void rejectsAbsurdHeartRate() throws Exception {
-        mockMvc.perform(post(ANALYZE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800, "[70.0,71.0,69.0,72.0,500.0]")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
     }
 
     @Test
@@ -164,7 +133,7 @@ class GuestMeasurementControllerTest {
         // 같은 prefix의 저장용 엔드포인트는 여전히 토큰을 요구한다
         mockMvc.perform(post("/api/measurements")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody(60, 1800, "[]")))
+                        .content(requestBody(60, 1800)))
                 .andExpect(status().isUnauthorized());
     }
 }

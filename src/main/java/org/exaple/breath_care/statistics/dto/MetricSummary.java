@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * 한 지표의 기간 요약. 시안의 "평균 82 / 최고 94 / 최소 68" 부분이다.
  *
- * @param count 이 지표를 실제로 가진 측정 수. HRV나 스트레스 지수는 비어 있을 수 있어
+ * @param count 이 지표를 실제로 가진 측정 수. HRV나 컨디션 지수는 비어 있을 수 있어
  *              전체 측정 수와 다를 수 있다
  */
 public record MetricSummary(Double avg, Double max, Double min, int count) {

@@ -64,10 +64,10 @@ class StatisticsControllerTest {
     }
 
     /** 한국 시간 기준 특정 날짜·시각에 측정을 남긴다. */
-    private void measurementAt(LocalDate date, int hour, double hr, Double hrv, Double stressScore) {
+    private void measurementAt(LocalDate date, int hour, double hr, Double hrv, Double conditionScore) {
         Instant at = date.atTime(LocalTime.of(hour, 0)).atZone(DayRange.ZONE).toInstant();
         measurementRepository.save(Measurement.create(
-                userId, hr, hrv, stressScore, MeasurementQuality.GOOD, at));
+                userId, hr, hrv, hrv, conditionScore, MeasurementQuality.GOOD, at));
     }
 
     @Test
@@ -86,7 +86,7 @@ class StatisticsControllerTest {
                 .andExpect(jsonPath("$.data.hr.min").value(68.0))
                 .andExpect(jsonPath("$.data.hrv.max").value(32.0))
                 .andExpect(jsonPath("$.data.hrv.min").value(16.0))
-                .andExpect(jsonPath("$.data.stressScore.max").value(88.0));
+                .andExpect(jsonPath("$.data.conditionScore.max").value(88.0));
     }
 
     @Test

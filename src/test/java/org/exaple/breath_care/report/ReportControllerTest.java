@@ -98,7 +98,7 @@ class ReportControllerTest {
         for (int i = 0; i < count; i++) {
             Instant at = today.atTime(LocalTime.of(9, 0)).atZone(DayRange.ZONE).toInstant().plusSeconds(i);
             measurementRepository.save(Measurement.create(
-                    userId, 70.0 + i, 35.0, 40.0, MeasurementQuality.GOOD, at));
+                    userId, 70.0 + i, 35.0, 32.0, 85.0, MeasurementQuality.GOOD, at));
         }
     }
 

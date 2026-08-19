@@ -66,9 +66,9 @@ class SessionControllerTest {
     }
 
     /** 측정을 직접 만든다. 신호처리가 스텁이라 API로는 고정값밖에 못 만들기 때문. */
-    private Long measurement(double hr, Double hrv, Double stressScore) {
+    private Long measurement(double hr, Double hrv, Double conditionScore) {
         return measurementRepository.save(Measurement.create(
-                userId, hr, hrv, stressScore, MeasurementQuality.GOOD, Instant.now())).getId();
+                userId, hr, hrv, hrv, conditionScore, MeasurementQuality.GOOD, Instant.now())).getId();
     }
 
     private Long startSession(Long preId) throws Exception {
@@ -86,7 +86,7 @@ class SessionControllerTest {
     @Test
     @DisplayName("세션을 시작하면 전 측정만 담기고 변화량은 비어 있다")
     void start() throws Exception {
-        Long preId = measurement(88, 24.0, 78.0);
+        Long preId = measurement(88, 24.0, 62.0);
 
         mockMvc.perform(post(SESSIONS)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -97,7 +97,7 @@ class SessionControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.preset").value("RELAX_FOUR_SIX"))
                 .andExpect(jsonPath("$.data.before.hr").value(88.0))
-                .andExpect(jsonPath("$.data.before.stressScore").value(78.0))
+                .andExpect(jsonPath("$.data.before.conditionScore").value(62.0))
                 .andExpect(jsonPath("$.data.after").doesNotExist())
                 .andExpect(jsonPath("$.data.change").doesNotExist())
                 .andExpect(jsonPath("$.data.endedAt").doesNotExist());
@@ -106,9 +106,9 @@ class SessionControllerTest {
     @Test
     @DisplayName("세션을 끝내면 세 지표의 전후 변화를 계산한다")
     void complete() throws Exception {
-        Long preId = measurement(88, 24.0, 78.0);
+        Long preId = measurement(88, 24.0, 62.0);
         Long sessionId = startSession(preId);
-        Long postId = measurement(74, 29.0, 62.0);
+        Long postId = measurement(74, 29.0, 78.0);
 
         mockMvc.perform(patch(SESSIONS + "/" + sessionId + "/complete")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -126,8 +126,8 @@ class SessionControllerTest {
                                 new java.math.BigDecimal("0.01"))))
                 // HRV는 늘어나는 것이 좋아진 것
                 .andExpect(jsonPath("$.data.change.hrv").value(5.0))
-                // 스트레스는 줄어드는 것이 좋아진 것
-                .andExpect(jsonPath("$.data.change.stressScore").value(-16.0))
+                // 컨디션 지수는 늘어나는 것이 좋아진 것
+                .andExpect(jsonPath("$.data.change.conditionScore").value(16.0))
                 .andExpect(jsonPath("$.data.endedAt").isNotEmpty());
     }
 
@@ -136,7 +136,7 @@ class SessionControllerTest {
     void nullMetricsProduceNullChange() throws Exception {
         Long preId = measurement(88, null, null);
         Long sessionId = startSession(preId);
-        Long postId = measurement(74, 29.0, 62.0);
+        Long postId = measurement(74, 29.0, 78.0);
 
         mockMvc.perform(patch(SESSIONS + "/" + sessionId + "/complete")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -147,15 +147,15 @@ class SessionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.change.hr").value(-14.0))
                 .andExpect(jsonPath("$.data.change.hrv").doesNotExist())
-                .andExpect(jsonPath("$.data.change.stressScore").doesNotExist());
+                .andExpect(jsonPath("$.data.change.conditionScore").doesNotExist());
     }
 
     @Test
     @DisplayName("이미 끝난 세션을 다시 끝내면 409")
     void completeTwice() throws Exception {
-        Long preId = measurement(88, 24.0, 78.0);
+        Long preId = measurement(88, 24.0, 62.0);
         Long sessionId = startSession(preId);
-        Long postId = measurement(74, 29.0, 62.0);
+        Long postId = measurement(74, 29.0, 78.0);
         String body = """
                 {"postMeasurementId":%d}
                 """.formatted(postId);
@@ -199,7 +199,7 @@ class SessionControllerTest {
         int start = login.indexOf("\"accessToken\":\"") + "\"accessToken\":\"".length();
         String otherToken = login.substring(start, login.indexOf('"', start));
 
-        Long myMeasurementId = measurement(88, 24.0, 78.0);
+        Long myMeasurementId = measurement(88, 24.0, 62.0);
 
         mockMvc.perform(post(SESSIONS)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + otherToken)
@@ -213,7 +213,7 @@ class SessionControllerTest {
     @Test
     @DisplayName("세션 이력을 조회한다")
     void findHistory() throws Exception {
-        startSession(measurement(88, 24.0, 78.0));
+        startSession(measurement(88, 24.0, 62.0));
         startSession(measurement(90, 22.0, 80.0));
 
         mockMvc.perform(get(SESSIONS).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
