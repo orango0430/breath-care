@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/api_client.dart';
+import '../services/api_exception.dart';
+import '../services/calendar_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
@@ -47,43 +50,68 @@ class _LogScreenState extends State<LogScreen> {
   // Selected bottom navigation index (1 = Log)
   int _selectedNavIndex = 1;
 
-  // Dynamic Schedules List
-  final List<Map<String, dynamic>> _schedules = [
-    {
-      'title': '전공 세미나 발표',
-      'category': '발표',
-      'date': DateTime(2026, 8, 25),
-      'time': '오전 9:00',
-      'isCompleted': true,
-    },
-    {
-      'title': '졸업논문 심사',
-      'category': '시험',
-      'date': DateTime(2026, 8, 25),
-      'time': '오전 10:00',
-      'isCompleted': true,
-    },
-    {
-      'title': '프로젝트 회의 일정',
-      'category': '발표',
-      'date': DateTime(2026, 8, 25),
-      'time': '오후 2:30',
-      'isCompleted': false,
-    },
-    {
-      'title': '중앙해커톤 본선 피칭',
-      'category': '발표',
-      'date': DateTime(2026, 8, 25),
-      'time': '오후 6:30',
-      'isCompleted': false,
-    },
-  ];
+  /// Schedules for the visible month, loaded from the server.
+  ///
+  /// Kept as maps rather than [CalendarEvent] so the existing list and calendar
+  /// widgets below keep working unchanged; only the source of the data moved.
+  /// An `id` is carried along for the edit and delete actions still to come.
+  List<Map<String, dynamic>> _schedules = [];
+
+  bool _isLoadingSchedules = false;
 
   @override
   void initState() {
     super.initState();
     _selectedSubTab = widget.initialSubTab;
     _selectedDate = _today;
+    _loadSchedules();
+  }
+
+  /// Fetches the displayed month. The server treats `to` as exclusive, so the
+  /// first day of the next month is the right upper bound.
+  Future<void> _loadSchedules() async {
+    if (!ApiClient.instance.isLoggedIn) {
+      // Guests have no schedules by design — nothing is stored for them.
+      setState(() => _schedules = []);
+      return;
+    }
+
+    setState(() => _isLoadingSchedules = true);
+    final month = DateTime(_currentDisplayMonth.year, _currentDisplayMonth.month, 1);
+
+    try {
+      final events = await CalendarService.instance.events(
+        from: month,
+        to: DateTime(month.year, month.month + 1, 1),
+      );
+      if (!mounted) return;
+      setState(() {
+        _schedules = events.map(_toRow).toList();
+        _isLoadingSchedules = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingSchedules = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.coralRed),
+      );
+    }
+  }
+
+  Map<String, dynamic> _toRow(CalendarEvent event) => {
+        'id': event.id,
+        'title': event.title,
+        'category': event.displayCategory ?? event.eventType.label,
+        'date': DateTime(event.startAt.year, event.startAt.month, event.startAt.day),
+        'time': _formatTime(event.startAt),
+        // The server has no notion of "done" yet, so nothing is ever ticked.
+        'isCompleted': false,
+      };
+
+  static String _formatTime(DateTime at) {
+    final period = at.hour < 12 ? '오전' : '오후';
+    final hour = at.hour == 0 ? 12 : (at.hour > 12 ? at.hour - 12 : at.hour);
+    return '$period $hour:${at.minute.toString().padLeft(2, '0')}';
   }
 
   void _onBottomNavTap(int index) {
@@ -339,6 +367,7 @@ class _LogScreenState extends State<LogScreen> {
                         1,
                       );
                     });
+                    _loadSchedules();
                   },
                   icon: const Icon(
                     Icons.chevron_left_rounded,
@@ -367,6 +396,7 @@ class _LogScreenState extends State<LogScreen> {
                         1,
                       );
                     });
+                    _loadSchedules();
                   },
                   icon: const Icon(
                     Icons.chevron_right_rounded,
@@ -535,12 +565,21 @@ class _LogScreenState extends State<LogScreen> {
                   context,
                   initialDate: _selectedDate,
                   onScheduleAdded: (newSchedule) {
+                    // Already stored on the server by the modal; this only
+                    // moves the calendar to the new date and shows it.
                     setState(() {
                       _schedules.add(newSchedule);
                       if (newSchedule['date'] != null) {
                         final newDate = newSchedule['date'] as DateTime;
                         _selectedDate = newDate;
+                        final movedMonth = newDate.month != _currentDisplayMonth.month ||
+                            newDate.year != _currentDisplayMonth.year;
                         _currentDisplayMonth = DateTime(newDate.year, newDate.month, 1);
+                        if (movedMonth) {
+                          // The list only holds the month it loaded, so a
+                          // schedule placed elsewhere needs a fresh fetch.
+                          _loadSchedules();
+                        }
                       }
                     });
                   },
@@ -574,7 +613,21 @@ class _LogScreenState extends State<LogScreen> {
         ),
         const SizedBox(height: 14),
 
-        if (daySchedules.isEmpty)
+        if (_isLoadingSchedules)
+          // Distinct from the empty state below: "still fetching" must not look
+          // like "you have nothing planned".
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.lightGray),
+              ),
+            ),
+          )
+        else if (daySchedules.isEmpty)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
