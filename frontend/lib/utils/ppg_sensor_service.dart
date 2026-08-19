@@ -12,6 +12,11 @@ class PpgMeasurementResult {
   final double measuredExhaleSec;
   final String signalQuality;
 
+  /// Set when the reading came back from the server. The server owns this
+  /// number, so when it is present the local formula below must not be used —
+  /// two answers on one screen is worse than either answer alone.
+  final double? serverConditionScore;
+
   PpgMeasurementResult({
     required this.bpm,
     required this.hrvSdnnMs,
@@ -19,9 +24,39 @@ class PpgMeasurementResult {
     required this.measuredInhaleSec,
     required this.measuredExhaleSec,
     this.signalQuality = 'Good',
+    this.serverConditionScore,
   });
 
-  int get conditionScore => (hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
+  /// Builds a result from an analysed server reading.
+  ///
+  /// Breathing pace is still derived here because the server does not return
+  /// it — it is a presentation detail, not a measurement.
+  factory PpgMeasurementResult.fromServer({
+    required double hr,
+    required double hrv,
+    required double? conditionScore,
+    required String quality,
+  }) {
+    final bpm = hr.round();
+    final breathRpm = (bpm / 5.2).round().clamp(10, 20);
+    return PpgMeasurementResult(
+      bpm: bpm,
+      hrvSdnnMs: double.parse(hrv.toStringAsFixed(1)),
+      breathRpm: breathRpm,
+      measuredInhaleSec:
+          double.parse((60.0 / breathRpm * 0.42).clamp(1.8, 4.5).toStringAsFixed(1)),
+      measuredExhaleSec:
+          double.parse((60.0 / breathRpm * 0.58).clamp(2.0, 6.0).toStringAsFixed(1)),
+      signalQuality: quality,
+      serverConditionScore: conditionScore,
+    );
+  }
+
+  /// Prefers the server's number. The local formula is a fallback for the web
+  /// simulation samples, which never reach the server.
+  int get conditionScore =>
+      serverConditionScore?.round() ??
+      (hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
 
   int get stressIndex =>
       ((bpm / 1.3) + (50 - hrvSdnnMs * 0.7)).clamp(15.0, 95.0).round();
@@ -169,6 +204,10 @@ class PpgSensorService {
 
   bool get isCameraAvailable => _isCameraAvailable;
 
+  /// True when the camera could not be opened on a real device. The screen
+  /// should say so rather than pretending a measurement is running.
+  bool cameraInitFailed = false;
+
   Future<void> initializeCamera() async {
     _isDisposed = false;
     isFingerDetected = false;
@@ -218,7 +257,16 @@ class PpgSensorService {
       await _cameraController!.startImageStream(_processCameraFrame);
     } catch (e) {
       debugPrint('Camera initialization error: $e');
-      _startSimulationFallback();
+      // Only fake a pulse where there is no camera to begin with. On a real
+      // phone this path is reached by a denied permission or a camera another
+      // app is holding, and the fallback reports isFingerDetected = true with
+      // invented intervals — the user would see a clean "measurement" and the
+      // made-up numbers would be uploaded as a genuine reading.
+      if (kIsWeb || kDebugMode) {
+        _startSimulationFallback();
+      } else {
+        cameraInitFailed = true;
+      }
     } finally {
       _isInitializing = false;
     }

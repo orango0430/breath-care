@@ -3,10 +3,64 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
+import '../services/api_client.dart';
+import '../services/auth_service.dart';
+import '../services/push_service.dart';
 import 'login_screen.dart';
 
-class MyPageScreen extends StatelessWidget {
+class MyPageScreen extends StatefulWidget {
   const MyPageScreen({super.key});
+
+  @override
+  State<MyPageScreen> createState() => _MyPageScreenState();
+}
+
+class _MyPageScreenState extends State<MyPageScreen> {
+  bool get _isLoggedIn => ApiClient.instance.isLoggedIn;
+
+  Future<void> _onProfileTapped() async {
+    if (!_isLoggedIn) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+      // Coming back from login flips the profile row, so redraw.
+      if (mounted) setState(() {});
+      return;
+    }
+
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.darkCharcoal,
+        title: const Text('로그아웃', style: TextStyle(color: AppColors.white)),
+        content: const Text('로그아웃하면 이 기기로는 알림도 받지 않아요.',
+            style: TextStyle(color: AppColors.lightGray)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소', style: TextStyle(color: AppColors.lightGray)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('로그아웃', style: TextStyle(color: AppColors.coralRed)),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout != true) return;
+
+    // Hand the FCM token over so the server stops sending to this phone.
+    // Losing it would leave a logged-out device still getting reminders.
+    final fcmToken = await PushService.instance.currentToken();
+    await AuthService.instance.logout(fcmToken: fcmToken);
+
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,13 +105,7 @@ class MyPageScreen extends StatelessWidget {
 
               // User Profile Section (GUEST Avatar & GUEST Text -> Tap opens LoginScreen)
               GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const LoginScreen(),
-                    ),
-                  );
-                },
+                onTap: _onProfileTapped,
                 behavior: HitTestBehavior.opaque,
                 child: Row(
                   children: [
@@ -79,22 +127,22 @@ class MyPageScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'GUEST',
-                          style: TextStyle(
+                          _isLoggedIn ? '로그인됨' : 'GUEST',
+                          style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                             color: AppColors.white,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
-                          '로그인 / 회원가입하기 >',
-                          style: TextStyle(
+                          _isLoggedIn ? '로그아웃하기 >' : '로그인 / 회원가입하기 >',
+                          style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 12,
                             fontWeight: FontWeight.w400,

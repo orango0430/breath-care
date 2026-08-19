@@ -7,9 +7,14 @@ import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
 import '../utils/ppg_sensor_service.dart';
 import '../utils/breathing_routine_model.dart';
+import '../services/api_client.dart';
+import '../services/api_exception.dart';
+import '../services/measurement_service.dart';
 import 'measurement_result_screen.dart';
 
-enum MeasurementStatus { waiting, measuring, completed }
+/// `analyzing` covers the round trip to the server: the take is finished but
+/// the numbers are not back yet.
+enum MeasurementStatus { waiting, measuring, analyzing, completed }
 
 class ConditionMeasurementScreen extends StatefulWidget {
   const ConditionMeasurementScreen({super.key});
@@ -149,9 +154,10 @@ class _ConditionMeasurementScreenState
           _secondsLeft--;
           _progress = (20 - _secondsLeft) / 20.0;
           if (kIsWeb) {
-            // Live web simulation sample update
-            _lastResult = _ppgService.computeResults();
-          } else {
+            // Live web simulation sample update. On a device there is nothing
+            // to show yet — the numbers only exist once the server has seen
+            // the waveform, and computing a preview here would put a second,
+            // different answer on screen a moment before the real one.
             _lastResult = _ppgService.computeResults();
           }
         } else {
@@ -163,28 +169,76 @@ class _ConditionMeasurementScreenState
     });
   }
 
-  void _setCompletedState() {
+  Future<void> _setCompletedState() async {
     _measurementTimer?.cancel();
-    if (kIsWeb) {
-      // 웹(크롬) 시뮬레이션: 5대 카테고리 중 하나가 랜덤으로 반환되도록 설정!
-      _lastResult = PpgMeasurementResult.randomSample();
-    } else {
-      _lastResult = _ppgService.computeResults();
-      if (_lastResult!.bpm == 0 || _lastResult!.hrvSdnnMs == 0) {
-        _lastResult = PpgMeasurementResult.randomSample();
-      }
-    }
 
-    _recommendedRoutine = BreathingRoutineModel.fromMeasurement(
-      bpm: _lastResult!.bpm,
-      hrvSdnn: _lastResult!.hrvSdnnMs,
-    );
+    final waveform = _ppgService.waveform;
+    final fps = _ppgService.capturedFps;
+    final durationSec = _ppgService.capturedDurationSec;
     _ppgService.stopCamera(); // Turn off LED flash torch automatically after 20s!
 
+    if (kIsWeb) {
+      // 웹(크롬) 시뮬레이션: 5대 카테고리 중 하나가 랜덤으로 반환되도록 설정!
+      _applyResult(PpgMeasurementResult.randomSample());
+      return;
+    }
+
+    setState(() => _status = MeasurementStatus.analyzing);
+
+    // The phone only carries the waveform. Heart rate, HRV and the condition
+    // score are all worked out server side, so every phone gets the same
+    // answer and the algorithm can be corrected without shipping a new build.
+    try {
+      final measurement = ApiClient.instance.isLoggedIn
+          ? await MeasurementService.instance
+              .submit(samples: waveform, fps: fps, durationSec: durationSec)
+          : await MeasurementService.instance
+              .analyzeAsGuest(samples: waveform, fps: fps, durationSec: durationSec);
+
+      if (!mounted) return;
+      _applyResult(PpgMeasurementResult.fromServer(
+        hr: measurement.hr ?? 0,
+        hrv: measurement.hrv ?? 0,
+        conditionScore: measurement.conditionScore,
+        quality: measurement.quality.name.toUpperCase(),
+      ));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // POOR_SIGNAL_QUALITY is the expected outcome of a bad take, not a
+      // crash. Send the user back to measure again instead of inventing a
+      // number — a made-up reading is worse than no reading in a health app.
+      _showRetakePrompt(e.message);
+    }
+  }
+
+  void _applyResult(PpgMeasurementResult result) {
+    _lastResult = result;
+    _recommendedRoutine = BreathingRoutineModel.fromMeasurement(
+      bpm: result.bpm,
+      hrvSdnn: result.hrvSdnnMs,
+    );
+    if (!mounted) return;
     setState(() {
       _status = MeasurementStatus.completed;
       _secondsLeft = 0;
       _progress = 1.0; // 100% complete
+    });
+  }
+
+  void _showRetakePrompt(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.coralRed,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+    setState(() {
+      _status = MeasurementStatus.waiting;
+      _secondsLeft = 20;
+      _progress = 0.0;
+      _lastResult = null;
+      _recommendedRoutine = null;
     });
   }
 
@@ -326,6 +380,8 @@ class _ConditionMeasurementScreenState
         return _isFingerCovered
             ? '손을 떼지 말고\n그대로 유지해주세요'
             : '카메라와 플래시 위에\n손가락을 살포시 덮어주세요';
+      case MeasurementStatus.analyzing:
+        return '측정한 파형을 분석하고 있어요\n잠시만 기다려주세요';
       case MeasurementStatus.completed:
         return '측정이 끝났어요\n결과 화면으로 이동할게요';
     }
@@ -653,6 +709,11 @@ class _ConditionMeasurementScreenState
         break;
       case MeasurementStatus.measuring:
         buttonText = '측정 중... (${(_progress * 100).toInt()}%)';
+        buttonBgColor = AppColors.darkCharcoal;
+        buttonTextColor = AppColors.lightMint;
+        break;
+      case MeasurementStatus.analyzing:
+        buttonText = '분석 중...';
         buttonBgColor = AppColors.darkCharcoal;
         buttonTextColor = AppColors.lightMint;
         break;

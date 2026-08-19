@@ -22,7 +22,14 @@ class PushService {
   /// stores the token against an account.
   static Future<void> initialize() async {
     if (Firebase.apps.isNotEmpty) return;
-    await Firebase.initializeApp();
+    try {
+      await Firebase.initializeApp();
+    } catch (e) {
+      // Runs before runApp. A throw here would leave the user with a blank
+      // screen instead of an app that merely lacks notifications.
+      debugPrint('Firebase init failed, push disabled: $e');
+      return;
+    }
 
     // A token can be reissued at any time — app reinstall, cache clear, or
     // Firebase's own rotation. Miss it and the phone quietly stops getting
@@ -40,22 +47,33 @@ class PushService {
   /// token to give. **A refusal is not an error** — the rest of the app works
   /// fine without notifications, so callers should carry on either way.
   Future<String?> register() async {
-    final settings = await FirebaseMessaging.instance.requestPermission();
-    if (settings.authorizationStatus == AuthorizationStatus.denied) {
+    // Catch everything, not just API failures. Firebase itself can be absent —
+    // no google-services.json in a variant, a platform without it, a test — and
+    // `FirebaseMessaging.instance` throws outright in that case. Login calls
+    // this, so an unusable Firebase must not be able to block signing in.
+    try {
+      if (Firebase.apps.isEmpty) return null;
+
+      final settings = await FirebaseMessaging.instance.requestPermission();
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        return null;
+      }
+
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null) return null;
+
+      await _send(token);
+      return token;
+    } catch (e) {
+      debugPrint('Push registration skipped: $e');
       return null;
     }
-
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token == null) return null;
-
-    await _send(token);
-    return token;
   }
 
   /// Stops notifications for this device. Logout does the same thing server
   /// side, so this is for a "notifications off" toggle.
   Future<void> unregister() async {
-    final token = await FirebaseMessaging.instance.getToken();
+    final token = await currentToken();
     if (token == null) return;
     try {
       await ApiClient.instance.delete('/api/devices', body: {'fcmToken': token});
@@ -65,8 +83,17 @@ class PushService {
   }
 
   /// The token, for handing to `AuthService.logout` so the server can drop
-  /// this device as part of signing out.
-  Future<String?> currentToken() => FirebaseMessaging.instance.getToken();
+  /// this device as part of signing out. Null when Firebase is unavailable —
+  /// logout still has to work in that case.
+  Future<String?> currentToken() async {
+    try {
+      if (Firebase.apps.isEmpty) return null;
+      return await FirebaseMessaging.instance.getToken();
+    } catch (e) {
+      debugPrint('FCM token unavailable: $e');
+      return null;
+    }
+  }
 
   /// Messages that arrive while the app is open. Android does not draw a
   /// notification for these, so show them in-app if you want them seen.

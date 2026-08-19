@@ -3,6 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
+import '../services/api_exception.dart';
+import '../services/auth_service.dart';
+import 'home_screen.dart';
 import 'signup_screen.dart';
 
 /// Login Screen (로그인 페이지 matching left screenshot 100%)
@@ -16,6 +19,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  /// Guards against a second tap while the request is in flight. Without it a
+  /// double tap creates two logins and two device registrations.
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -37,7 +44,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _onLoginPressed() {
+  Future<void> _onLoginPressed() async {
+    if (_isSubmitting) return;
+
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -56,14 +65,24 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('로그인이 성공적으로 완료되었습니다.'),
-        backgroundColor: AppColors.lightMint,
-        duration: Duration(seconds: 2),
-      ),
-    );
-    Navigator.of(context).pop();
+    setState(() => _isSubmitting = true);
+    try {
+      await AuthService.instance.login(email: email, password: password);
+      if (!mounted) return;
+      // Replace rather than pop: the user came from onboarding or a guest
+      // flow, and going "back" to those from a signed-in home makes no sense.
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false,
+      );
+    } on ApiException catch (e) {
+      // The server writes these messages in Korean for the user already —
+      // including deliberately not saying whether it was the email or the
+      // password that was wrong.
+      _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -172,16 +191,25 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(29),
                           ),
-                          child: const Center(
-                            child: Text(
-                              '로그인하기',
-                              style: TextStyle(
-                                fontFamily: AppFonts.pretendard,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E1E20),
-                              ),
-                            ),
+                          child: Center(
+                            child: _isSubmitting
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.4,
+                                      color: Color(0xFF1E1E20),
+                                    ),
+                                  )
+                                : const Text(
+                                    '로그인하기',
+                                    style: TextStyle(
+                                      fontFamily: AppFonts.pretendard,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1E1E20),
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
