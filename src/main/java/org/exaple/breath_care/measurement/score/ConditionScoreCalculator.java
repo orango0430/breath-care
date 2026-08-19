@@ -49,6 +49,10 @@ public final class ConditionScoreCalculator {
         }
 
         double raw = hrvSdnn * SLOPE + INTERCEPT;
-        return Math.min(MAX_SCORE, Math.max(MIN_SCORE, raw));
+        double clamped = Math.min(MAX_SCORE, Math.max(MIN_SCORE, raw));
+
+        // 소수 첫째 자리로 끊는다. 안 하면 23.4 * 1.4 + 40 이 72.75999999999999로 나가서
+        // 앱 화면과 리포트에 그대로 실린다. 신호처리도 같은 자리에서 반올림한다.
+        return Math.round(clamped * 10.0) / 10.0;
     }
 }

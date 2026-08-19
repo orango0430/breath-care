@@ -43,6 +43,18 @@ class ConditionScoreCalculatorTest {
         assertThat(ConditionScoreCalculator.score(27.0)).isCloseTo(77.8, org.assertj.core.data.Offset.offset(0.01));
     }
 
+    /**
+     * 배포된 서버에서 {@code 72.75999999999999}가 응답에 그대로 실려 나온 적이 있다.
+     * 부동소수점 찌꺼기가 앱 화면과 AI 리포트까지 따라간다.
+     */
+    @Test
+    @DisplayName("소수 첫째 자리까지만 낸다 — 부동소수점 찌꺼기를 흘리지 않는다")
+    void roundsToOneDecimal() {
+        // 23.4 * 1.4 + 40 은 double로 계산하면 72.75999999999999가 된다
+        assertThat(ConditionScoreCalculator.score(23.4)).isEqualTo(72.8);
+        assertThat(ConditionScoreCalculator.score(19.6)).isEqualTo(67.4);
+    }
+
     @Test
     @DisplayName("어떤 입력에도 50~96을 벗어나지 않는다")
     void alwaysWithinRange() {
