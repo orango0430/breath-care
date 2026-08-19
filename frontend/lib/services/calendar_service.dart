@@ -19,6 +19,22 @@ enum EventType {
 
   static EventType parse(String? raw) => EventType.values
       .firstWhere((e) => e.wire == raw, orElse: () => EventType.etc);
+
+  /// Turns one of the category chips into what the server wants.
+  ///
+  /// The chips start as 시험/발표/면접 but the user can type their own, so
+  /// anything unrecognised becomes [etc] plus a `customCategory`. The server
+  /// keeps that text and echoes it back as `displayCategory`, which is why the
+  /// UI never has to remember the original label itself.
+  static ({EventType type, String? custom}) fromCategory(String category) {
+    final trimmed = category.trim();
+    for (final type in EventType.values) {
+      if (type != EventType.etc && type.label == trimmed) {
+        return (type: type, custom: null);
+      }
+    }
+    return (type: EventType.etc, custom: trimmed.isEmpty ? null : trimmed);
+  }
 }
 
 class CalendarEvent {

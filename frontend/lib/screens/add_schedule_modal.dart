@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/api_client.dart';
+import '../services/api_exception.dart';
+import '../services/calendar_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 
@@ -48,6 +51,10 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
   int _selectedCategoryIndex = 0;
   final List<String> _categories = ['발표', '시험', '면접'];
 
+  /// Blocks a second tap while the save request is in flight. Without it a
+  /// double tap creates the same schedule twice on the server.
+  bool _isSaving = false;
+
   final List<String> _monthNames = const [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
@@ -72,32 +79,73 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
     super.dispose();
   }
 
-  void _onSavePressed() {
+  /// Saves to the server, then hands the stored event back to the caller.
+  ///
+  /// Nothing is kept locally on failure. A schedule that only exists on the
+  /// phone would show in the list but never produce a reminder, because the
+  /// scheduler that sends them reads the server's table.
+  Future<void> _onSavePressed() async {
+    if (_isSaving) return;
+
     final title = _titleController.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('일정 제목을 입력해 주세요.'),
-          backgroundColor: AppColors.coralRed,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      _showError('일정 제목을 입력해 주세요.');
       return;
     }
 
-    final newSchedule = {
-      'title': title,
-      'category': _categories[_selectedCategoryIndex],
-      'date': _selectedDate,
-      'time': _formattedTimeString,
-      'isCompleted': false,
-    };
-
-    if (widget.onScheduleAdded != null) {
-      widget.onScheduleAdded!(newSchedule);
+    if (!ApiClient.instance.isLoggedIn) {
+      _showError('일정을 저장하려면 로그인이 필요해요.');
+      return;
     }
 
-    Navigator.of(context).pop();
+    final category = _categories[_selectedCategoryIndex];
+    final mapped = EventType.fromCategory(category);
+
+    setState(() => _isSaving = true);
+    try {
+      final saved = await CalendarService.instance.create(
+        title: title,
+        eventType: mapped.type,
+        startAt: _startAt,
+        customCategory: mapped.custom,
+      );
+
+      if (!mounted) return;
+      widget.onScheduleAdded?.call({
+        'id': saved.id,
+        'title': saved.title,
+        // Prefer the server's label: it resolves custom categories for us.
+        'category': saved.displayCategory ?? category,
+        'date': DateTime(saved.startAt.year, saved.startAt.month, saved.startAt.day),
+        'time': _formatTime(TimeOfDay.fromDateTime(saved.startAt)),
+        'isCompleted': false,
+      });
+      Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      _showError(e.message);
+    }
+  }
+
+  /// The chosen day and time as one instant. They are held separately by the
+  /// two pickers, and the server takes a single `startAt`.
+  DateTime get _startAt => DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+        _selectedTime.hour,
+        _selectedTime.minute,
+      );
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.coralRed,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _addCustomCategory() {
@@ -153,12 +201,13 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
     return '${_selectedDate.year}년 ${_selectedDate.month}월 ${_selectedDate.day}일 $weekdayStr';
   }
 
-  String get _formattedTimeString {
-    final period = _selectedTime.hour < 12 ? '오전' : '오후';
-    final hour = _selectedTime.hour == 0
-        ? 12
-        : (_selectedTime.hour > 12 ? _selectedTime.hour - 12 : _selectedTime.hour);
-    final minuteStr = _selectedTime.minute.toString().padLeft(2, '0');
+  String get _formattedTimeString => _formatTime(_selectedTime);
+
+  static String _formatTime(TimeOfDay time) {
+    final period = time.hour < 12 ? '오전' : '오후';
+    final hour =
+        time.hour == 0 ? 12 : (time.hour > 12 ? time.hour - 12 : time.hour);
+    final minuteStr = time.minute.toString().padLeft(2, '0');
     return '$period $hour:$minuteStr';
   }
 
@@ -309,7 +358,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
 
           // Confirm (✓) Button
           GestureDetector(
-            onTap: _onSavePressed,
+            onTap: _isSaving ? null : _onSavePressed,
             child: Container(
               width: 48,
               height: 48,
@@ -317,11 +366,19 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                 color: Color(0xFF1E1F21),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.check_rounded,
-                color: AppColors.white,
-                size: 22,
-              ),
+              child: _isSaving
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.white,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.check_rounded,
+                      color: AppColors.white,
+                      size: 22,
+                    ),
             ),
           ),
         ],

@@ -9,6 +9,7 @@ import 'package:breath_care/services/api_client.dart';
 import 'package:breath_care/services/api_config.dart';
 import 'package:breath_care/services/api_exception.dart';
 import 'package:breath_care/services/auth_service.dart';
+import 'package:breath_care/services/calendar_service.dart';
 import 'package:breath_care/services/measurement_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -117,6 +118,75 @@ void main() {
       throwsA(isA<ApiException>()
           .having((e) => e.code, 'code', ApiException.unauthorized)
           .having((e) => e.requiresLogin, 'requiresLogin', isTrue)),
+    );
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
+  test('일정을 만들면 서버에 남고 기간 조회로 다시 읽힌다', () async {
+    await AuthService.instance
+        .signup(email: email, password: 'password123', nickname: '일정');
+    await AuthService.instance.login(email: email, password: 'password123');
+
+    final startAt = DateTime.now().add(const Duration(days: 3));
+    final created = await CalendarService.instance.create(
+      title: '중앙해커톤 본선 피칭',
+      eventType: EventType.presentation,
+      startAt: startAt,
+    );
+
+    expect(created.id, greaterThan(0));
+    expect(created.title, '중앙해커톤 본선 피칭');
+    expect(created.eventType, EventType.presentation);
+
+    // The month window the 일정관리 screen asks for.
+    final month = DateTime(startAt.year, startAt.month, 1);
+    final events = await CalendarService.instance.events(
+      from: month,
+      to: DateTime(month.year, month.month + 1, 1),
+    );
+
+    expect(events.map((e) => e.id), contains(created.id),
+        reason: '앱이 그리는 월 범위 안에 저장한 일정이 들어와야 한다');
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
+  test('직접 만든 카테고리는 ETC + customCategory로 저장된다', () async {
+    await AuthService.instance
+        .signup(email: email, password: 'password123', nickname: '커스텀');
+    await AuthService.instance.login(email: email, password: 'password123');
+
+    // 모달에서 사용자가 새 카테고리를 추가한 경우
+    final mapped = EventType.fromCategory('동아리');
+    expect(mapped.type, EventType.etc);
+    expect(mapped.custom, '동아리');
+
+    final created = await CalendarService.instance.create(
+      title: '동아리 정기 모임',
+      eventType: mapped.type,
+      startAt: DateTime.now().add(const Duration(days: 1)),
+      customCategory: mapped.custom,
+    );
+
+    expect(created.displayCategory, '동아리',
+        reason: '서버가 커스텀 이름을 그대로 돌려줘야 화면에 그 이름이 뜬다');
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
+  test('기본 카테고리 3종은 서버 enum으로 정확히 매핑된다', () {
+    expect(EventType.fromCategory('발표').type, EventType.presentation);
+    expect(EventType.fromCategory('시험').type, EventType.exam);
+    expect(EventType.fromCategory('면접').type, EventType.interview);
+    expect(EventType.fromCategory('발표').custom, isNull);
+  });
+
+  test('비회원은 일정을 저장할 수 없다', () async {
+    await ApiClient.instance.setToken(null);
+
+    expect(
+      () => CalendarService.instance.create(
+        title: '비회원 일정',
+        eventType: EventType.etc,
+        startAt: DateTime.now().add(const Duration(days: 1)),
+      ),
+      throwsA(isA<ApiException>()
+          .having((e) => e.code, 'code', ApiException.unauthorized)),
     );
   }, timeout: const Timeout(Duration(seconds: 60)));
 
