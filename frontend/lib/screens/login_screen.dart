@@ -206,10 +206,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                     style: TextStyle(
                                       fontFamily: AppFonts.pretendard,
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w400,
                                       color: Color(0xFF1E1E20),
                                     ),
                                   ),
+                          ),
                           ),
                         ),
                       ),
@@ -282,7 +283,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 TextSpan(
                                   text: '회원가입하기',
                                   style: TextStyle(
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w400,
                                     color: AppColors.white,
                                   ),
                                 ),
@@ -374,7 +375,7 @@ class _LoginScreenState extends State<LoginScreen> {
               style: const TextStyle(
                 fontFamily: AppFonts.pretendard,
                 fontSize: 15,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w400,
                 color: AppColors.white,
               ),
             ),

@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
 import '../services/calendar_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
@@ -11,6 +13,7 @@ import 'home_screen.dart';
 import 'condition_measurement_screen.dart';
 import 'my_page_screen.dart';
 import 'add_schedule_modal.dart';
+import '../utils/schedule_storage_service.dart';
 
 class LogScreen extends StatefulWidget {
   final int initialSubTab;
@@ -25,6 +28,53 @@ class LogScreen extends StatefulWidget {
 }
 
 class _LogScreenState extends State<LogScreen> {
+  // Recorded condition scores history for weekly average calculation
+  List<int> _recordedConditionScores = [57, 81, 90, 84];
+
+  // Recorded HR History for dynamic HR Analysis
+  List<int> _recordedHrHistory = [];
+
+  // Recorded HRV History: Map<int, List<int>> mapping weekday (1=Mon..7=Sun) to list of HRV values (ms)
+  Map<int, List<int>> _weekdayHrvMap = {};
+  List<int> _allHrvValues = [];
+
+  String get _avgHrStr {
+    if (_recordedHrHistory.isEmpty) return '82';
+    final sum = _recordedHrHistory.reduce((a, b) => a + b);
+    return (sum / _recordedHrHistory.length).round().toString();
+  }
+
+  String get _maxHrStr {
+    if (_recordedHrHistory.isEmpty) return '94';
+    return _recordedHrHistory.reduce(math.max).toString();
+  }
+
+  String get _minHrStr {
+    if (_recordedHrHistory.isEmpty) return '68';
+    return _recordedHrHistory.reduce(math.min).toString();
+  }
+
+  String get _avgHrvStr {
+    if (_allHrvValues.isEmpty) return '22';
+    final sum = _allHrvValues.reduce((a, b) => a + b);
+    return (sum / _allHrvValues.length).round().toString();
+  }
+
+  String get _maxHrvStr {
+    if (_allHrvValues.isEmpty) return '32';
+    return _allHrvValues.reduce(math.max).toString();
+  }
+
+  String get _minHrvStr {
+    if (_allHrvValues.isEmpty) return '16';
+    return _allHrvValues.reduce(math.min).toString();
+  }
+
+  int get _weeklyAvgConditionScore {
+    if (_recordedConditionScores.isEmpty) return 78;
+    final sum = _recordedConditionScores.reduce((a, b) => a + b);
+    return (sum / _recordedConditionScores.length).round();
+  }
   // Selected sub-tab: 0: 일정관리, 1: 기록, 2: 분석결과
   int _selectedSubTab = 0;
 
@@ -32,7 +82,6 @@ class _LogScreenState extends State<LogScreen> {
   bool _isMonthlyView = false;
 
   // Dynamic Today & Selected Date
-  final DateTime _today = DateTime.now();
   DateTime _selectedDate = DateTime.now();
   DateTime _currentDisplayMonth = DateTime.now();
 
@@ -50,11 +99,7 @@ class _LogScreenState extends State<LogScreen> {
   // Selected bottom navigation index (1 = Log)
   int _selectedNavIndex = 1;
 
-  /// Schedules for the visible month, loaded from the server.
-  ///
-  /// Kept as maps rather than [CalendarEvent] so the existing list and calendar
-  /// widgets below keep working unchanged; only the source of the data moved.
-  /// An `id` is carried along for the edit and delete actions still to come.
+  /// Schedules for the visible month, loaded from the server and local storage.
   List<Map<String, dynamic>> _schedules = [];
 
   bool _isLoadingSchedules = false;
@@ -62,6 +107,7 @@ class _LogScreenState extends State<LogScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
     _selectedSubTab = widget.initialSubTab;
     _selectedDate = _today;
     _loadSchedules();
@@ -112,6 +158,69 @@ class _LogScreenState extends State<LogScreen> {
     final period = at.hour < 12 ? '오전' : '오후';
     final hour = at.hour == 0 ? 12 : (at.hour > 12 ? at.hour - 12 : at.hour);
     return '$period $hour:${at.minute.toString().padLeft(2, '0')}';
+=======
+    _selectedDate = DateTime(now.year, now.month, now.day);
+    _currentDisplayMonth = DateTime(now.year, now.month, 1);
+
+    _loadSchedules();
+    _loadConditionScores();
+  }
+
+  Future<void> _loadSchedules() async {
+    final loaded = await ScheduleStorageService.loadSchedules();
+    if (mounted) {
+      setState(() {
+        _schedules.clear();
+        _schedules.addAll(loaded);
+      });
+    }
+  }
+
+  Future<void> _loadConditionScores() async {
+    final prefs = await SharedPreferences.getInstance();
+    final history = prefs.getStringList('condition_score_history');
+    if (history != null && history.isNotEmpty) {
+      final loaded = history.map((e) => int.tryParse(e) ?? 78).toList();
+      if (mounted) {
+        setState(() {
+          _recordedConditionScores = loaded;
+        });
+      }
+    }
+
+    final hrList = prefs.getStringList('hr_history');
+    if (hrList != null && hrList.isNotEmpty) {
+      final loadedHr = hrList.map((e) => int.tryParse(e) ?? 75).toList();
+      if (mounted) {
+        setState(() {
+          _recordedHrHistory = loadedHr;
+        });
+      }
+    }
+
+    final hrvList = prefs.getStringList('hrv_history_v2');
+    if (hrvList != null && hrvList.isNotEmpty) {
+      final Map<int, List<int>> map = {};
+      final List<int> allVals = [];
+      for (final entry in hrvList) {
+        final parts = entry.split(':');
+        if (parts.length == 2) {
+          final w = int.tryParse(parts[0]);
+          final v = int.tryParse(parts[1]);
+          if (w != null && v != null) {
+            map.putIfAbsent(w, () => []).add(v);
+            allVals.add(v);
+          }
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _weekdayHrvMap = map;
+          _allHrvValues = allVals;
+        });
+      }
+    }
+>>>>>>> cc8162f (feat: 하드코딩 데이터 실기능 연동 및 UI 스타일 정돈)
   }
 
   void _onBottomNavTap(int index) {
@@ -142,15 +251,6 @@ class _LogScreenState extends State<LogScreen> {
     return '${now.year}년 ${now.month}월 ${now.day}일 $weekdayStr';
   }
 
-  // Format dynamic today datetime (e.g. "2026년 8월 11일 화요일 12:34 기준")
-  String get _fullTodayDateTimeWithWeekday {
-    final now = DateTime.now();
-    final weekdayStr = _koreanWeekdays[now.weekday - 1];
-    final hourStr = now.hour.toString().padLeft(2, '0');
-    final minuteStr = now.minute.toString().padLeft(2, '0');
-    return '${now.year}년 ${now.month}월 ${now.day}일 $weekdayStr $hourStr:$minuteStr 기준';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -170,20 +270,20 @@ class _LogScreenState extends State<LogScreen> {
                   children: [
                     // Top App Header
                     _buildHeader(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 18),
 
                     // Title
                     Text(
                       'Time For\nYour Ritual',
                       style: GoogleFonts.outfit(
-                        fontSize: 32,
+                        fontSize: 38,
                         fontWeight: FontWeight.w400,
                         color: AppColors.white,
-                        height: 1.18,
+                        height: 1.14,
                         letterSpacing: 0.2,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
 
                     // Sub-Navigation Tabs: [일정관리, 기록, 분석결과]
                     _buildSubTabBar(),
@@ -304,7 +404,7 @@ class _LogScreenState extends State<LogScreen> {
                 style: TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontWeight: isSelected ? FontWeight.w400 : FontWeight.w400,
                   color: isSelected ? AppColors.darkBg : AppColors.slateGray,
                 ),
               ),
@@ -333,57 +433,56 @@ class _LogScreenState extends State<LogScreen> {
     final monthName = '${_monthNames[_currentDisplayMonth.month - 1]} ${_currentDisplayMonth.year}';
     final weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _isMonthlyView = !_isMonthlyView;
-        });
-      },
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.darkCharcoal,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: AppColors.slateDarkGray.withAlpha(60),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            // Calendar Month Navigation Row (< August 2026 >)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _currentDisplayMonth = DateTime(
-                        _currentDisplayMonth.year,
-                        _currentDisplayMonth.month - 1,
-                        1,
-                      );
-                    });
-                    _loadSchedules();
-                  },
-                  icon: const Icon(
-                    Icons.chevron_left_rounded,
-                    color: AppColors.lightGray,
-                    size: 24,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF28292D),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        children: [
+          // Calendar Month Navigation Row (< August 2026 >)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    _currentDisplayMonth = DateTime(
+                      _currentDisplayMonth.year,
+                      _currentDisplayMonth.month - 1,
+                      1,
+                    );
+                  });
+                  _loadSchedules();
+                },
+                icon: const Icon(
+                  Icons.chevron_left_rounded,
+                  color: Color(0xFF90939A),
+                  size: 22,
                 ),
-                Text(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isMonthlyView = !_isMonthlyView;
+                  });
+                },
+                child: Text(
                   monthName,
                   style: const TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.white,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white,
                     letterSpacing: 0.3,
                   ),
                 ),
@@ -400,40 +499,54 @@ class _LogScreenState extends State<LogScreen> {
                   },
                   icon: const Icon(
                     Icons.chevron_right_rounded,
-                    color: AppColors.lightGray,
-                    size: 24,
+                    color: Color(0xFF90939A),
+                    size: 22,
                   ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-              ],
-            ),
-            const SizedBox(height: 20),
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
 
-            // Weekday Headers: M T W T F S S
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: weekDays.map((day) {
-                return SizedBox(
-                  width: 36,
-                  child: Text(
-                    day,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontFamily: AppFonts.pretendard,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.slateGray,
+          if (!_isMonthlyView)
+            _buildWeeklyCalendar()
+          else ...[
+            // Weekday Headers for Monthly View (Tap any weekday to toggle back)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isMonthlyView = false;
+                });
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: weekDays.map((day) {
+                  return SizedBox(
+                    width: 36,
+                    child: Text(
+                      day,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: AppFonts.pretendard,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF90939A),
+                      ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
             const SizedBox(height: 14),
-
-            if (!_isMonthlyView) _buildWeeklyCalendar() else _buildMonthlyCalendar(),
+            _buildMonthlyCalendar(),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -441,41 +554,76 @@ class _LogScreenState extends State<LogScreen> {
   Widget _buildWeeklyCalendar() {
     final monday = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
     final weekDates = List.generate(7, (i) => monday.add(Duration(days: i)));
+    final weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: weekDates.map((date) {
+      children: List.generate(7, (i) {
+        final date = weekDates[i];
+        final dayLetter = weekDays[i];
         final isSelected = date.year == _selectedDate.year &&
             date.month == _selectedDate.month &&
             date.day == _selectedDate.day;
 
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedDate = date;
-            });
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 36,
-            height: 36,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isSelected ? AppColors.lightMint : Colors.transparent,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '${date.day}',
-              style: TextStyle(
-                fontFamily: AppFonts.pretendard,
-                fontSize: 15,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                color: isSelected ? AppColors.darkBg : AppColors.white,
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 38,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFE4FBCB) : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top Weekday Letter (Tap to Toggle Monthly View)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isMonthlyView = !_isMonthlyView;
+                  });
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+                  child: Text(
+                    dayLetter,
+                    style: TextStyle(
+                      fontFamily: AppFonts.pretendard,
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.w400 : FontWeight.w400,
+                      color: isSelected ? const Color(0xFF1E1E20) : const Color(0xFF90939A),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 6),
+
+              // Bottom Date Number (Tap to Select Date)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedDate = date;
+                  });
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+                  child: Text(
+                    '${date.day}',
+                    style: TextStyle(
+                      fontFamily: AppFonts.pretendard,
+                      fontSize: 15,
+                      fontWeight: isSelected ? FontWeight.w400 : FontWeight.w400,
+                      color: isSelected ? const Color(0xFF1E1E20) : Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
-      }).toList(),
+      }),
     );
   }
 
@@ -510,14 +658,15 @@ class _LogScreenState extends State<LogScreen> {
               _selectedDate = date;
             });
           },
+          behavior: HitTestBehavior.opaque,
           child: Center(
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 36,
-              height: 36,
+              duration: const Duration(milliseconds: 180),
+              width: 38,
+              height: 38,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: isSelected ? AppColors.lightMint : Colors.transparent,
+                color: isSelected ? const Color(0xFFE4FBCB) : Colors.transparent,
                 shape: BoxShape.circle,
               ),
               child: Text(
@@ -525,8 +674,8 @@ class _LogScreenState extends State<LogScreen> {
                 style: TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 15,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                  color: isSelected ? AppColors.darkBg : AppColors.white,
+                  fontWeight: isSelected ? FontWeight.w400 : FontWeight.w400,
+                  color: isSelected ? const Color(0xFF1E1E20) : Colors.white,
                 ),
               ),
             ),
@@ -555,7 +704,7 @@ class _LogScreenState extends State<LogScreen> {
               style: TextStyle(
                 fontFamily: AppFonts.pretendard,
                 fontSize: 17,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
                 color: AppColors.white,
               ),
             ),
@@ -564,24 +713,18 @@ class _LogScreenState extends State<LogScreen> {
                 AddScheduleModal.show(
                   context,
                   initialDate: _selectedDate,
-                  onScheduleAdded: (newSchedule) {
-                    // Already stored on the server by the modal; this only
-                    // moves the calendar to the new date and shows it.
+                  onScheduleAdded: (newSchedule) async {
+                    await ScheduleStorageService.addSchedule(newSchedule);
                     setState(() {
                       _schedules.add(newSchedule);
                       if (newSchedule['date'] != null) {
                         final newDate = newSchedule['date'] as DateTime;
                         _selectedDate = newDate;
-                        final movedMonth = newDate.month != _currentDisplayMonth.month ||
-                            newDate.year != _currentDisplayMonth.year;
                         _currentDisplayMonth = DateTime(newDate.year, newDate.month, 1);
-                        if (movedMonth) {
-                          // The list only holds the month it loaded, so a
-                          // schedule placed elsewhere needs a fresh fetch.
-                          _loadSchedules();
-                        }
                       }
                     });
+                    _loadSchedules();
+                  },
                   },
                 );
               },
@@ -653,7 +796,7 @@ class _LogScreenState extends State<LogScreen> {
                     fontFamily: AppFonts.pretendard,
                     fontSize: 14,
                     color: AppColors.lightGray,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
                 SizedBox(height: 4),
@@ -674,14 +817,10 @@ class _LogScreenState extends State<LogScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10.0),
               child: _buildScheduleItem(
+                schedule: schedule,
                 title: schedule['title'] ?? '',
                 time: schedule['time'] ?? '',
                 isCompleted: schedule['isCompleted'] ?? false,
-                onToggle: () {
-                  setState(() {
-                    schedule['isCompleted'] = !(schedule['isCompleted'] as bool);
-                  });
-                },
               ),
             );
           }),
@@ -690,84 +829,280 @@ class _LogScreenState extends State<LogScreen> {
   }
 
   Widget _buildScheduleItem({
+    required Map<String, dynamic> schedule,
     required String title,
     required String time,
     required bool isCompleted,
-    required VoidCallback onToggle,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.darkCharcoal,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: AppColors.slateDarkGray.withAlpha(50),
-          width: 0.8,
+    return GestureDetector(
+      onLongPress: () {
+        _showScheduleOptionsModal(schedule);
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF28292D),
+          borderRadius: BorderRadius.circular(20),
         ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: isCompleted ? AppColors.lightGray : AppColors.white,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.access_time_outlined,
+                      color: Color(0xFF90939A),
+                      size: 15,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      time,
+                      style: const TextStyle(
+                        fontFamily: AppFonts.pretendard,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF90939A),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            ElevatedButton(
+              onPressed: isCompleted
+                  ? null
+                  : () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ConditionMeasurementScreen(
+                            scheduleTitle: schedule['title'] as String?,
+                          ),
+                        ),
+                      ).then((_) {
+                        _loadSchedules();
+                      });
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE4FBCB),
+                disabledBackgroundColor: const Color(0xFF1E1E20),
+                foregroundColor: const Color(0xFF1E1E20),
+                disabledForegroundColor: const Color(0xFF6E727A),
+                elevation: 0,
+                minimumSize: const Size(102, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
                 ),
               ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.access_time_rounded,
-                    color: AppColors.slateGray,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    time,
-                    style: const TextStyle(
-                      fontFamily: AppFonts.pretendard,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.slateGray,
-                    ),
-                  ),
-                ],
+              child: Text(
+                isCompleted ? '준비완료' : '준비하기',
+                style: TextStyle(
+                  fontFamily: AppFonts.pretendard,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: isCompleted ? const Color(0xFF6E727A) : const Color(0xFF1E1E20),
+                ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // LONG-PRESS OPTIONS: 편집 / 삭제 모달
+  // ===========================================================================
+  void _showScheduleOptionsModal(Map<String, dynamic> schedule) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          decoration: const BoxDecoration(
+            color: Color(0xFF232426),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top drag handle
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.slateGray.withAlpha(120),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title header
+              Text(
+                '${schedule['title']}',
+                style: const TextStyle(
+                  fontFamily: AppFonts.pretendard,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 18),
+
+              // Edit option
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2E3034),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.edit_rounded,
+                    color: AppColors.lightMint,
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  '일정 수정',
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  AddScheduleModal.show(
+                    context,
+                    initialSchedule: schedule,
+                    onScheduleUpdated: (updatedSchedule) async {
+                      await ScheduleStorageService.updateSchedule(
+                        schedule['id'] ?? schedule['title'],
+                        updatedSchedule,
+                      );
+                      _loadSchedules();
+                      if (mounted) {
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          const SnackBar(
+                            content: Text('일정이 수정되었습니다.'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Color(0xFF2E3034),
+                          ),
+                        );
+                      }
+                    },
+                  );
+                },
+              ),
+              const Divider(color: Color(0xFF2E3034), height: 1),
+
+              // Delete option
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.coralRed.withAlpha(40),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.coralRed,
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  '일정 삭제',
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.coralRed,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteSchedule(schedule);
+                },
+              ),
+              const SizedBox(height: 10),
             ],
           ),
+        );
+      },
+    );
+  }
 
-          ElevatedButton(
-            onPressed: onToggle,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isCompleted
-                  ? AppColors.slateDarkGray.withAlpha(120)
-                  : AppColors.lightMint,
-              foregroundColor:
-                  isCompleted ? AppColors.slateGray : AppColors.darkBg,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-            child: Text(
-              isCompleted ? '준비완료' : '준비하기',
-              style: TextStyle(
-                fontFamily: AppFonts.pretendard,
-                fontSize: 13,
-                fontWeight: isCompleted ? FontWeight.w600 : FontWeight.w700,
-              ),
+  void _confirmDeleteSchedule(Map<String, dynamic> schedule) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF232426),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            '일정 삭제',
+            style: TextStyle(
+              fontFamily: AppFonts.pretendard,
+              fontSize: 17,
+              fontWeight: FontWeight.w400,
+              color: Colors.white,
             ),
           ),
-        ],
-      ),
+          content: Text(
+            '"${schedule['title']}" 일정을 삭제하시겠습니까?',
+            style: const TextStyle(
+              fontFamily: AppFonts.pretendard,
+              fontSize: 14,
+              color: AppColors.lightGray,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소', style: TextStyle(color: AppColors.slateGray)),
+            ),
+            TextButton(
+              onPressed: () async {
+                await ScheduleStorageService.deleteSchedule(schedule['id'] ?? schedule['title']);
+                _loadSchedules();
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('일정이 삭제되었습니다.'),
+                      duration: Duration(seconds: 2),
+                      backgroundColor: AppColors.coralRed,
+                    ),
+                  );
+                }
+              },
+              child: const Text('삭제', style: TextStyle(color: AppColors.coralRed, fontWeight: FontWeight.w400)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -790,12 +1125,8 @@ class _LogScreenState extends State<LogScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.darkCharcoal,
+        color: const Color(0xFF28292D),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.slateDarkGray.withAlpha(60),
-          width: 1,
-        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -804,56 +1135,59 @@ class _LogScreenState extends State<LogScreen> {
             '이번 주 평균 컨디션 지수',
             style: TextStyle(
               fontFamily: AppFonts.pretendard,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: AppColors.lightGray,
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              color: Color(0xFF90939A),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+              // Left: 78 /100 (Centered /100 vertically next to 78)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    '78',
-                    style: TextStyle(
-                      fontFamily: AppFonts.pretendard,
+                    '$_weeklyAvgConditionScore',
+                    style: GoogleFonts.outfit(
                       fontSize: 42,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.white,
-                      height: 1,
+                      fontWeight: FontWeight.w400,
+                      color: const Color(0xFFE4FBCB),
+                      height: 1.0,
                     ),
                   ),
-                  SizedBox(width: 6),
-                  Text(
-                    '/100',
-                    style: TextStyle(
-                      fontFamily: AppFonts.pretendard,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.slateGray,
+                  const SizedBox(width: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      ' /100',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w300,
+                        color: Colors.white.withAlpha(210),
+                        height: 1.0,
+                      ),
                     ),
                   ),
                 ],
               ),
 
+              // Right: Bar Chart & Date Subtext
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   _buildRecordBarChart(),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Text(
                     _fullTodayDateWithWeekday,
                     style: const TextStyle(
                       fontFamily: AppFonts.pretendard,
-                      fontSize: 11,
+                      fontSize: 13,
                       fontWeight: FontWeight.w400,
-                      color: AppColors.slateGray,
+                      color: Color(0xFF90939A),
                     ),
                   ),
                 ],
@@ -866,7 +1200,7 @@ class _LogScreenState extends State<LogScreen> {
   }
 
   Widget _buildRecordBarChart() {
-    final barHeights = [18.0, 24.0, 30.0, 48.0, 36.0, 22.0, 28.0];
+    final barHeights = [18.0, 24.0, 30.0, 48.0, 40.0, 22.0, 30.0];
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -874,18 +1208,20 @@ class _LogScreenState extends State<LogScreen> {
         final isHighlight = index == 3;
         return Container(
           margin: EdgeInsets.only(left: index == 0 ? 0 : 5.0),
-          width: 12,
+          width: 14,
           height: barHeights[index],
           decoration: BoxDecoration(
             color: isHighlight
-                ? AppColors.lightMint
-                : AppColors.slateDarkGray.withAlpha(150),
+                ? const Color(0xFFE4FBCB)
+                : (index == 2 || index == 4
+                    ? const Color(0xFF566352)
+                    : const Color(0xFF43474E)),
             borderRadius: BorderRadius.circular(6),
             boxShadow: isHighlight
                 ? const [
                     BoxShadow(
-                      color: Color(0x66E2FFDA),
-                      blurRadius: 8,
+                      color: Color(0x66E4FBCB),
+                      blurRadius: 10,
                       spreadRadius: 1,
                     ),
                   ]
@@ -904,115 +1240,53 @@ class _LogScreenState extends State<LogScreen> {
           '오늘의 기록',
           style: TextStyle(
             fontFamily: AppFonts.pretendard,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: AppColors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w400,
+            color: Colors.white,
           ),
         ),
         const SizedBox(height: 14),
 
-        // Item 1
-        _buildRecordCardItem(
-          title: '전공 세미나 발표',
-          time: '오전 8:45',
-          statusTag: '보통',
-          statusTagBgColor: const Color(0xFF484729),
-          statusTagTextColor: const Color(0xFFE0F5A0),
-          score: 57,
-          isEvaluated: true,
-        ),
-        const SizedBox(height: 10),
-
-        // Item 2
-        _buildRecordCardItem(
-          title: '졸업논문 심사',
-          time: '오전 9:30',
-          statusTag: '좋음',
-          statusTagBgColor: const Color(0xFF384351),
-          statusTagTextColor: const Color(0xFFBFE0FF),
-          score: 81,
-          isEvaluated: true,
-        ),
-        const SizedBox(height: 10),
-
-        // Item 3
-        _buildRecordCardItem(
-          title: '프로젝트 회의 일정',
-          time: '진행 전',
-          isEvaluated: false,
-        ),
-        const SizedBox(height: 10),
-
-        // Item 4
-        _buildRecordCardItem(
-          title: '중앙해커톤 본선 피칭',
-          time: '진행 전',
-          isEvaluated: false,
-        ),
-        const SizedBox(height: 24),
-
-        // Bottom "Ritual 시작하기" Full-Width Light Mint Rounded Button
-        GestureDetector(
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => const ConditionMeasurementScreen(),
-              ),
-            );
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: AppColors.lightMint,
-              borderRadius: BorderRadius.circular(27),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.lightMint.withAlpha(80),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Center(
+        if (_schedules.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24.0),
+            child: Center(
               child: Text(
-                'Ritual 시작하기',
+                '오늘 예정된 일정이 없습니다.',
                 style: TextStyle(
                   fontFamily: AppFonts.pretendard,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.darkBg,
+                  fontSize: 14,
+                  color: AppColors.slateGray,
                 ),
               ),
             ),
-          ),
-        ),
+          )
+        else
+          ..._schedules.map((schedule) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: _buildRecordScheduleCardItem(schedule),
+            );
+          }),
       ],
     );
   }
 
-  Widget _buildRecordCardItem({
-    required String title,
-    required String time,
-    String? statusTag,
-    Color? statusTagBgColor,
-    Color? statusTagTextColor,
-    int score = 0,
-    required bool isEvaluated,
-  }) {
+  Widget _buildRecordScheduleCardItem(Map<String, dynamic> schedule) {
+    final title = schedule['title'] as String? ?? '';
+    final time = schedule['time'] as String? ?? '';
+    final isCompleted = schedule['isCompleted'] as bool? ?? false;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: AppColors.darkCharcoal,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: AppColors.slateDarkGray.withAlpha(50),
-          width: 0.8,
-        ),
+        color: const Color(0xFF28292D),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // Left: Title & Sub-info (Time)
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1021,16 +1295,16 @@ class _LogScreenState extends State<LogScreen> {
                 style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.white,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   const Icon(
-                    Icons.access_time_rounded,
-                    color: AppColors.slateGray,
+                    Icons.access_time_outlined,
+                    color: Color(0xFF90939A),
                     size: 14,
                   ),
                   const SizedBox(width: 4),
@@ -1040,7 +1314,7 @@ class _LogScreenState extends State<LogScreen> {
                       fontFamily: AppFonts.pretendard,
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
-                      color: AppColors.slateGray,
+                      color: Color(0xFF90939A),
                     ),
                   ),
                 ],
@@ -1048,84 +1322,40 @@ class _LogScreenState extends State<LogScreen> {
             ],
           ),
 
+          // Right: Status Pill Tag (If completed: 리추얼 완료) + Circle Arrow Button
           Row(
             children: [
-              if (isEvaluated && statusTag != null) ...[
+              if (isCompleted) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(
-                    color: statusTagBgColor ?? AppColors.slateDarkGray,
-                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFF505560),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Text(
-                    statusTag,
+                  child: const Text(
+                    '리추얼 완료',
                     style: TextStyle(
                       fontFamily: AppFonts.pretendard,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: statusTagTextColor ?? AppColors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      '$score',
-                      style: const TextStyle(
-                        fontFamily: AppFonts.pretendard,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
-                      ),
-                    ),
-                    const Text(
-                      '/100',
-                      style: TextStyle(
-                        fontFamily: AppFonts.pretendard,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.slateGray,
-                      ),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                const Text(
-                  '0',
-                  style: TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.slateGray,
-                  ),
-                ),
-                const Text(
-                  '/100',
-                  style: TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.slateGray,
-                  ),
-                ),
+                const SizedBox(width: 12),
               ],
-              const SizedBox(width: 12),
 
               Container(
-                width: 36,
-                height: 36,
+                width: 38,
+                height: 38,
                 decoration: const BoxDecoration(
-                  color: Color(0xFF383A3E),
+                  color: Color(0xFF1F2023),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.arrow_forward_rounded,
-                  color: AppColors.white,
-                  size: 16,
+                  color: isCompleted ? Colors.white : const Color(0xFF555860),
+                  size: 18,
                 ),
               ),
             ],
@@ -1142,259 +1372,20 @@ class _LogScreenState extends State<LogScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 1. 호흡 전후 변화 카드
-        _buildBreathBeforeAfterCard(),
-        const SizedBox(height: 28),
-
-        // 2. HR 심박수 섹션 (통계 + 라인 차트)
+        // 1. HR 심박수 섹션 (통계 + 라인 차트)
         _buildHrSection(),
         const SizedBox(height: 28),
 
-        // 3. HRV 심박변이도 섹션 (통계 + 요일별 막대 차트)
+        // 2. HRV 심박변이도 섹션 (통계 + 요일별 막대 차트)
         _buildHrvSection(),
         const SizedBox(height: 28),
 
-        // 4. AI 분석 · 현재 상태 카드
+        // 3. AI 분석 · 현재 상태 카드
         _buildAiAnalysisCard(),
         const SizedBox(height: 24),
 
-        // 5. 의료 참고용 하단 안내 문구
+        // 4. 의료 참고용 하단 안내 문구
         _buildMedicalDisclaimerText(),
-      ],
-    );
-  }
-
-  /// 1. 호흡 전후 변화 카드
-  Widget _buildBreathBeforeAfterCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.darkCharcoal,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: AppColors.slateDarkGray.withAlpha(60),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Card Header with Legend
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(
-                    Icons.bar_chart_rounded,
-                    color: AppColors.white,
-                    size: 20,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    '호흡 전후 변화',
-                    style: TextStyle(
-                      fontFamily: AppFonts.pretendard,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.white,
-                    ),
-                  ),
-                ],
-              ),
-
-              // Legend: Ritual 전 / Ritual 후
-              Row(
-                children: [
-                  _buildLegendItem(color: AppColors.slateGray, label: 'Ritual 전'),
-                  const SizedBox(width: 10),
-                  _buildLegendItem(color: AppColors.lightMint, label: 'Ritual 후'),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Metric 1: HR 심박수 (88 -> 74, -16%)
-          _buildBeforeAfterMetricRow(
-            label: 'HR',
-            subLabel: '심박수',
-            beforeVal: '88',
-            afterVal: '74',
-            changeText: '-16%',
-            beforeRatio: 0.85,
-            afterRatio: 0.65,
-          ),
-          const SizedBox(height: 18),
-
-          // Metric 2: HRV 심박변이도 (24 -> 29, +21%)
-          _buildBeforeAfterMetricRow(
-            label: 'HRV',
-            subLabel: '심박변이도',
-            beforeVal: '24',
-            afterVal: '29',
-            changeText: '+21%',
-            beforeRatio: 0.60,
-            afterRatio: 0.85,
-          ),
-          const SizedBox(height: 16),
-
-          // Timestamp Footer
-          Text(
-            _fullTodayDateTimeWithWeekday,
-            style: const TextStyle(
-              fontFamily: AppFonts.pretendard,
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
-              color: AppColors.slateGray,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLegendItem({required Color color, required String label}) {
-    return Row(
-      children: [
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 11,
-            fontWeight: FontWeight.w400,
-            color: AppColors.lightGray,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBeforeAfterMetricRow({
-    required String label,
-    required String subLabel,
-    required String beforeVal,
-    required String afterVal,
-    required String changeText,
-    required double beforeRatio,
-    required double afterRatio,
-  }) {
-    return Row(
-      children: [
-        // Label (HR 심박수)
-        SizedBox(
-          width: 76,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.white,
-                ),
-              ),
-              Text(
-                subLabel,
-                style: const TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.slateGray,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Values: 88 -> 74
-        Row(
-          children: [
-            Text(
-              beforeVal,
-              style: const TextStyle(
-                fontFamily: AppFonts.pretendard,
-                fontSize: 17,
-                fontWeight: FontWeight.w500,
-                color: AppColors.slateGray,
-              ),
-            ),
-            const SizedBox(width: 6),
-            const Icon(
-              Icons.arrow_forward_rounded,
-              color: AppColors.slateGray,
-              size: 14,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              afterVal,
-              style: const TextStyle(
-                fontFamily: AppFonts.pretendard,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.white,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(width: 14),
-
-        // Progress Bar Pair Graphic
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Before Bar (Gray)
-              FractionallySizedBox(
-                widthFactor: beforeRatio,
-                child: Container(
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: AppColors.slateGray,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-
-              // After Bar (Mint)
-              FractionallySizedBox(
-                widthFactor: afterRatio,
-                child: Container(
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: AppColors.lightMint,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-
-        // Change Percentage (-16%, +21%)
-        Text(
-          changeText,
-          style: const TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppColors.lightMint,
-          ),
-        ),
       ],
     );
   }
@@ -1413,7 +1404,7 @@ class _LogScreenState extends State<LogScreen> {
               style: TextStyle(
                 fontFamily: AppFonts.pretendard,
                 fontSize: 17,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
                 color: AppColors.white,
               ),
             ),
@@ -1445,27 +1436,33 @@ class _LogScreenState extends State<LogScreen> {
 
         // 3-Column Metric Box (평균 82 bpm, 최고 94 bpm, 최소 68 bpm)
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: AppColors.darkCharcoal,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: AppColors.slateDarkGray.withAlpha(50),
-              width: 0.8,
-            ),
+            color: const Color(0xFF28292D),
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
             children: [
-              _buildStatColumn(label: '평균', value: '82', unit: 'bpm'),
+              _buildStatColumn(
+                label: '평균',
+                value: _avgHrStr,
+                unit: 'bpm',
+                valueColor: const Color(0xFFE4FBCB),
+              ),
               _buildVerticalDivider(),
               _buildStatColumn(
                 label: '최고',
-                value: '94',
+                value: _maxHrStr,
                 unit: 'bpm',
-                valueColor: AppColors.pastelYellow,
+                valueColor: const Color(0xFFF9F6AF),
               ),
               _buildVerticalDivider(),
-              _buildStatColumn(label: '최소', value: '68', unit: 'bpm'),
+              _buildStatColumn(
+                label: '최소',
+                value: _minHrStr,
+                unit: 'bpm',
+                valueColor: const Color(0xFFDCE7F8),
+              ),
             ],
           ),
         ),
@@ -1491,7 +1488,7 @@ class _LogScreenState extends State<LogScreen> {
                 style: TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w400,
                   color: AppColors.lightGray,
                 ),
               ),
@@ -1502,7 +1499,7 @@ class _LogScreenState extends State<LogScreen> {
                 height: 200,
                 width: double.infinity,
                 child: CustomPaint(
-                  painter: _HrLineChartPainter(),
+                  painter: _HrLineChartPainter(hrList: _recordedHrHistory),
                 ),
               ),
             ],
@@ -1526,7 +1523,7 @@ class _LogScreenState extends State<LogScreen> {
               style: TextStyle(
                 fontFamily: AppFonts.pretendard,
                 fontSize: 17,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
                 color: AppColors.white,
               ),
             ),
@@ -1558,27 +1555,33 @@ class _LogScreenState extends State<LogScreen> {
 
         // 3-Column Metric Box (평균 22 ms, 최고 32 ms, 최소 16 ms)
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: AppColors.darkCharcoal,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: AppColors.slateDarkGray.withAlpha(50),
-              width: 0.8,
-            ),
+            color: const Color(0xFF28292D),
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
             children: [
-              _buildStatColumn(label: '평균', value: '22', unit: 'ms'),
+              _buildStatColumn(
+                label: '평균',
+                value: _avgHrvStr,
+                unit: 'ms',
+                valueColor: const Color(0xFFE4FBCB),
+              ),
               _buildVerticalDivider(),
               _buildStatColumn(
                 label: '최고',
-                value: '32',
+                value: _maxHrvStr,
                 unit: 'ms',
-                valueColor: AppColors.lightMint,
+                valueColor: const Color(0xFFF9F6AF),
               ),
               _buildVerticalDivider(),
-              _buildStatColumn(label: '최소', value: '16', unit: 'ms'),
+              _buildStatColumn(
+                label: '최소',
+                value: _minHrvStr,
+                unit: 'ms',
+                valueColor: const Color(0xFFDCE7F8),
+              ),
             ],
           ),
         ),
@@ -1589,12 +1592,8 @@ class _LogScreenState extends State<LogScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: AppColors.darkCharcoal,
+            color: const Color(0xFF28292D),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: AppColors.slateDarkGray.withAlpha(50),
-              width: 0.8,
-            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1603,9 +1602,9 @@ class _LogScreenState extends State<LogScreen> {
                 '요일별 평균 HRV',
                 style: TextStyle(
                   fontFamily: AppFonts.pretendard,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.lightGray,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
                 ),
               ),
               const SizedBox(height: 24),
@@ -1619,17 +1618,79 @@ class _LogScreenState extends State<LogScreen> {
     );
   }
 
-  /// 7 Vertical Rounded Bars Chart for HRV (월~일 matching 디자인_4 하단)
+  /// 7 Vertical Rounded Bars Chart for HRV (월~일 matching 레퍼런스 이미지)
   Widget _buildHrvBarChart() {
-    final hrvData = [
-      {'day': '월', 'val': 22, 'height': 50.0, 'color': AppColors.slateDarkGray.withAlpha(150), 'textColor': AppColors.slateGray},
-      {'day': '화', 'val': 26, 'height': 75.0, 'color': AppColors.slateDarkGray.withAlpha(150), 'textColor': AppColors.slateGray},
-      {'day': '수', 'val': 32, 'height': 110.0, 'color': AppColors.lightMint, 'textColor': AppColors.lightMint, 'hasDot': true},
-      {'day': '목', 'val': 24, 'height': 68.0, 'color': AppColors.slateDarkGray.withAlpha(150), 'textColor': AppColors.slateGray},
-      {'day': '금', 'val': 19, 'height': 45.0, 'color': AppColors.pastelYellow, 'textColor': AppColors.pastelYellow, 'hasDot': true},
-      {'day': '토', 'val': 29, 'height': 90.0, 'color': AppColors.slateDarkGray.withAlpha(150), 'textColor': AppColors.slateGray},
-      {'day': '일', 'val': null, 'height': 10.0, 'color': AppColors.slateDarkGray.withAlpha(80), 'textColor': AppColors.slateGray},
-    ];
+    List<Map<String, dynamic>> hrvData;
+
+    if (_allHrvValues.isEmpty) {
+      // Default sample baseline matching reference design
+      hrvData = [
+        {'day': '월', 'val': 22, 'height': 50.0, 'color': const Color(0xFF454850), 'textColor': const Color(0xFF80848E)},
+        {'day': '화', 'val': 26, 'height': 80.0, 'color': const Color(0xFF4D5058), 'textColor': const Color(0xFF80848E)},
+        {'day': '수', 'val': 32, 'height': 120.0, 'color': const Color(0xFFE4FBCB), 'textColor': const Color(0xFFE4FBCB), 'hasDot': true},
+        {'day': '목', 'val': 24, 'height': 72.0, 'color': const Color(0xFF474A52), 'textColor': const Color(0xFF80848E)},
+        {'day': '금', 'val': 19, 'height': 55.0, 'color': const Color(0xFFF9F6AF), 'textColor': const Color(0xFFF9F6AF), 'hasDot': true},
+        {'day': '토', 'val': 29, 'height': 105.0, 'color': const Color(0xFF555861), 'textColor': const Color(0xFF80848E)},
+        {'day': '일', 'val': null, 'height': 8.0, 'color': const Color(0xFF38393F), 'textColor': const Color(0xFF6E727C)},
+      ];
+    } else {
+      // Dynamic calculation based on _weekdayHrvMap
+      final dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+      final Map<int, int?> dailyAvgs = {};
+      int? highestVal;
+      int? lowestVal;
+
+      for (int w = 1; w <= 7; w++) {
+        final list = _weekdayHrvMap[w];
+        if (list != null && list.isNotEmpty) {
+          final avg = (list.reduce((a, b) => a + b) / list.length).round();
+          dailyAvgs[w] = avg;
+          if (highestVal == null || avg > highestVal) highestVal = avg;
+          if (lowestVal == null || avg < lowestVal) lowestVal = avg;
+        } else {
+          dailyAvgs[w] = null;
+        }
+      }
+
+      hrvData = List.generate(7, (i) {
+        final w = i + 1; // 1 = Mon, 7 = Sun
+        final val = dailyAvgs[w];
+        if (val == null) {
+          return {
+            'day': dayNames[i],
+            'val': null,
+            'height': 8.0,
+            'color': const Color(0xFF38393F),
+            'textColor': const Color(0xFF6E727C),
+          };
+        }
+
+        final double ratio = (val / 45.0).clamp(0.2, 1.0);
+        final double height = ratio * 120.0;
+        final bool isHighest = (val == highestVal);
+        final bool isLowest = (val == lowestVal && highestVal != lowestVal);
+
+        Color barColor = const Color(0xFF555861);
+        Color textColor = const Color(0xFF80848E);
+
+        if (isHighest) {
+          barColor = const Color(0xFFE4FBCB);
+          textColor = const Color(0xFFE4FBCB);
+        } else if (isLowest) {
+          barColor = const Color(0xFFF9F6AF);
+          textColor = const Color(0xFFF9F6AF);
+        }
+
+        return {
+          'day': dayNames[i],
+          'val': val,
+          'height': height,
+          'color': barColor,
+          'textColor': textColor,
+          'hasDot': isHighest || isLowest,
+        };
+      });
+    }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1661,7 +1722,7 @@ class _LogScreenState extends State<LogScreen> {
               style: TextStyle(
                 fontFamily: AppFonts.pretendard,
                 fontSize: 13,
-                fontWeight: hasDot ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: hasDot ? FontWeight.w400 : FontWeight.w400,
                 color: textColor,
               ),
             ),
@@ -1701,45 +1762,48 @@ class _LogScreenState extends State<LogScreen> {
     Color? valueColor,
   }) {
     return Expanded(
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontFamily: AppFonts.pretendard,
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              color: AppColors.lightGray,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontFamily: AppFonts.pretendard,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: Color(0xFF90939A),
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: valueColor ?? AppColors.white,
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w400,
+                    color: valueColor ?? AppColors.white,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 3),
-              Text(
-                unit,
-                style: const TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.slateGray,
+                const SizedBox(width: 4),
+                Text(
+                  unit,
+                  style: const TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w300,
+                    color: Color(0xFF90939A),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1761,132 +1825,82 @@ class _LogScreenState extends State<LogScreen> {
           'AI 분석 · 현재 상태',
           style: TextStyle(
             fontFamily: AppFonts.pretendard,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: AppColors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w400,
+            color: Colors.white,
           ),
         ),
         const SizedBox(height: 14),
 
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: AppColors.darkCharcoal,
+            color: const Color(0xFF28292D),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: AppColors.slateDarkGray.withAlpha(50),
-              width: 0.8,
-            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header title with chevron
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      '심박수가 높아지는 순간, 리추얼이 도움이 될 수 있어요',
-                      style: TextStyle(
-                        fontFamily: AppFonts.pretendard,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.lightGray,
-                    size: 20,
-                  ),
-                ],
+              // Header title (No chevron >)
+              const Text(
+                '심박수가 높아지는 순간, 리추얼이 도움이 될 수 있어요',
+                style: TextStyle(
+                  fontFamily: AppFonts.pretendard,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
+                  height: 1.3,
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
-              // Rich Text Insights matching design paragraph
+              // Rich Text Insights
               RichText(
-                text: const TextSpan(
-                  style: TextStyle(
+                text: TextSpan(
+                  style: const TextStyle(
                     fontFamily: AppFonts.pretendard,
-                    fontSize: 13.5,
+                    fontSize: 14,
                     fontWeight: FontWeight.w400,
-                    color: AppColors.lightGray,
+                    color: Color(0xFF90939A),
                     height: 1.6,
                   ),
                   children: [
-                    TextSpan(text: '오늘의 평균 심박수는 '),
+                    const TextSpan(text: '오늘의 평균 심박수는 '),
                     TextSpan(
-                      text: '82 BPM',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
+                      text: '$_avgHrStr BPM',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white,
                       ),
                     ),
-                    TextSpan(text: '으로,\n정상 범위 내에서 '),
+                    const TextSpan(text: '으로,\n정상 범위 내에서 안정적인 상태를 유지하고 있어요.\n\n'),
+                    const TextSpan(text: '다만, 최고 심박수가 '),
                     TextSpan(
-                      text: '안정적인 상태를 유지',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
+                      text: '$_maxHrStr BPM',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white,
                       ),
                     ),
-                    TextSpan(text: '하고 있어요.\n\n'),
-                    TextSpan(text: '다만, 최고 심박수가 '),
+                    const TextSpan(text: '까지 상승한 순간이 있었어요.\n이는 일시적인 긴장이나 집중, 혹은 다가오는 일정에 대한 준비 상태로 볼 수 있어요.\n\n'),
+                    const TextSpan(text: '최저 심박수는 '),
                     TextSpan(
-                      text: '94 BPM',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
+                      text: '$_minHrStr BPM',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white,
                       ),
                     ),
-                    TextSpan(text: '까지 상승한 순간이 있었어요.\n이는 '),
-                    TextSpan(
-                      text: '일시적인 긴장이나 집중, 혹은 다가오는 일정에 대한 준비 상태',
+                    const TextSpan(text: '으로 관찰되며,\n이는 리추얼 이후 이완된 상태에서 나타나는 자연스러운 수치예요.\n\n'),
+                    const TextSpan(text: '전반적인 컨디션은 양호한 편이며, 심박수가 높아지는 순간엔\n'),
+                    const TextSpan(
+                      text: '짧은 리추얼로 미리 준비해보는 걸 추천드려요.',
                       style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFFE4FBCB),
                       ),
                     ),
-                    TextSpan(text: '로 볼 수 있어요.\n\n'),
-                    TextSpan(text: '최저 심박수는 '),
-                    TextSpan(
-                      text: '68 BPM',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
-                      ),
-                    ),
-                    TextSpan(text: '으로 관찰되며,\n이는 리추얼 이후 이완된 상태에서 나타나는 '),
-                    TextSpan(
-                      text: '자연스러운 수치',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
-                      ),
-                    ),
-                    TextSpan(text: '예요.\n\n'),
-                    TextSpan(text: '전반적인 컨디션은 양호한 편이며, '),
-                    TextSpan(
-                      text: '심박수가 높아지는 순간',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
-                      ),
-                    ),
-                    TextSpan(text: '엔 '),
-                    TextSpan(
-                      text: '짧은 리추얼로 미리 준비',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white,
-                      ),
-                    ),
-                    TextSpan(text: '해보는 걸 추천드려요.'),
                   ],
                 ),
               ),
@@ -1918,7 +1932,7 @@ class _LogScreenState extends State<LogScreen> {
   Widget _buildBottomFloatingNav() {
     return Row(
       children: [
-        // "Ritual" Circular Action Button
+        // 1. Ritual Circular Active/Quick Action Button
         GestureDetector(
           onTap: () {
             Navigator.of(context).push(
@@ -1931,32 +1945,31 @@ class _LogScreenState extends State<LogScreen> {
             width: 58,
             height: 58,
             decoration: const BoxDecoration(
-              color: AppColors.lightMint,
+              color: Color(0xFFE4FBCB),
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0x4DE2FFDA),
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
-                ),
-              ],
             ),
-            child: const Column(
+            child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.monitor_heart_outlined,
-                  color: AppColors.darkBg,
-                  size: 22,
+                Image.asset(
+                  'assets/images/nav_ritual.png',
+                  width: 22,
+                  height: 22,
+                  color: const Color(0xFF1E1E20),
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.monitor_heart_outlined,
+                    color: Color(0xFF1E1E20),
+                    size: 22,
+                  ),
                 ),
-                SizedBox(height: 1),
-                Text(
+                const SizedBox(height: 2),
+                const Text(
                   'Ritual',
                   style: TextStyle(
                     fontFamily: AppFonts.pretendard,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.darkBg,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFF1E1E20),
                   ),
                 ),
               ],
@@ -1965,36 +1978,40 @@ class _LogScreenState extends State<LogScreen> {
         ),
         const SizedBox(width: 10),
 
-        // Navigation Bar Container
+        // 2. Main Navigation Bar Capsule Container
         Expanded(
           child: Container(
             height: 58,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             decoration: BoxDecoration(
-              color: AppColors.darkCharcoal,
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(
-                color: AppColors.slateDarkGray.withAlpha(100),
-                width: 1,
-              ),
+              color: const Color(0xFF35373C),
+              borderRadius: BorderRadius.circular(29),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(
-                  index: 0,
-                  icon: Icons.home_rounded,
-                  label: 'Home',
+                Expanded(
+                  child: _buildNavItem(
+                    index: 0,
+                    assetPath: 'assets/images/nav_home.png',
+                    fallbackIcon: Icons.home_outlined,
+                    label: 'Home',
+                  ),
                 ),
-                _buildNavItem(
-                  index: 1,
-                  icon: Icons.calendar_today_rounded,
-                  label: 'Log',
+                Expanded(
+                  child: _buildNavItem(
+                    index: 1,
+                    assetPath: 'assets/images/nav_log.png',
+                    fallbackIcon: Icons.calendar_today_outlined,
+                    label: 'Log',
+                  ),
                 ),
-                _buildNavItem(
-                  index: 2,
-                  icon: Icons.air_rounded,
-                  label: 'Breath',
+                Expanded(
+                  child: _buildNavItem(
+                    index: 2,
+                    assetPath: 'assets/images/nav_breath.png',
+                    fallbackIcon: Icons.air_rounded,
+                    label: 'Breath',
+                  ),
                 ),
               ],
             ),
@@ -2004,47 +2021,49 @@ class _LogScreenState extends State<LogScreen> {
     );
   }
 
-  /// Single Navigation Item
+  /// Single Nav Tab Item (Aligned vertically with Icon + Label)
   Widget _buildNavItem({
     required int index,
-    required IconData icon,
+    required String assetPath,
+    required IconData fallbackIcon,
     required String label,
   }) {
     final isSelected = _selectedNavIndex == index;
 
     return GestureDetector(
       onTap: () => _onBottomNavTap(index),
+      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(
-          horizontal: isSelected ? 18 : 12,
-          vertical: 6,
-        ),
+        margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.slateDarkGray.withAlpha(128)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+          color: isSelected ? const Color(0xFF1E1E20) : Colors.transparent,
+          borderRadius: BorderRadius.circular(22),
         ),
-        child: Row(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: isSelected ? AppColors.white : AppColors.slateGray,
-              size: 20,
-            ),
-            if (isSelected) ...[
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.white,
-                ),
+            Image.asset(
+              assetPath,
+              width: 20,
+              height: 20,
+              color: isSelected ? Colors.white : const Color(0xFF82868E),
+              errorBuilder: (context, error, stackTrace) => Icon(
+                fallbackIcon,
+                color: isSelected ? Colors.white : const Color(0xFF82868E),
+                size: 20,
               ),
-            ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: AppFonts.pretendard,
+                fontSize: 10.5,
+                fontWeight: isSelected ? FontWeight.w400 : FontWeight.w400,
+                color: isSelected ? Colors.white : const Color(0xFF82868E),
+              ),
+            ),
           ],
         ),
       ),
@@ -2054,6 +2073,10 @@ class _LogScreenState extends State<LogScreen> {
 
 /// CustomPainter for "이번 주 HR 추이" Line Chart
 class _HrLineChartPainter extends CustomPainter {
+  final List<int> hrList;
+
+  _HrLineChartPainter({this.hrList = const []});
+
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
@@ -2097,6 +2120,15 @@ class _HrLineChartPainter extends CustomPainter {
 
     for (int i = 0; i < xDays.length; i++) {
       final x = startX + i * colW;
+
+      // Draw vertical dashed grid line for each day column
+      final vPath = Path();
+      for (double dy = 0; dy < h - 24; dy += 6) {
+        vPath.moveTo(x, dy);
+        vPath.lineTo(x, math.min(dy + 3, h - 24));
+      }
+      canvas.drawPath(vPath, gridPaint);
+
       final textSpan = TextSpan(text: xDays[i], style: textStyle);
       final textPainter = TextPainter(
         text: textSpan,
@@ -2106,118 +2138,133 @@ class _HrLineChartPainter extends CustomPainter {
       textPainter.paint(canvas, Offset(x - textPainter.width / 2, h - 14));
     }
 
-    // HR Line Path Data Points (mapped to chart area)
-    // Points across the week matching the wave in design_4
-    final points = [
-      Offset(startX + 0 * colW, h - 24 - 45),
-      Offset(startX + 0.5 * colW, h - 24 - 65),
-      Offset(startX + 1.0 * colW, h - 24 - 60),
-      Offset(startX + 1.5 * colW, h - 24 - 70),
-      Offset(startX + 2.0 * colW, h - 24 - 55),
-      Offset(startX + 2.5 * colW, h - 24 - 75),
-      Offset(startX + 3.0 * colW, h - 24 - 82),
-      Offset(startX + 3.5 * colW, h - 24 - 68),
-      Offset(startX + 4.0 * colW, h - 24 - 88),
-      Offset(startX + 4.5 * colW, h - 24 - 62),
-      Offset(startX + 5.0 * colW, h - 24 - 85),
-      Offset(startX + 5.5 * colW, h - 24 - 105), // Peak tooltip at 78
-    ];
+    // Dynamic HR Data Mapping
+    final List<int> activeData = hrList.isNotEmpty
+        ? hrList
+        : [50, 60, 65, 60, 72, 85, 74];
 
-    // Smooth Line Path
-    final path = Path();
-    path.moveTo(points.first.dx, points.first.dy);
+    final double stepX = activeData.length > 1
+        ? chartW / (activeData.length - 1)
+        : chartW;
 
-    for (int i = 0; i < points.length - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final controlX = (p0.dx + p1.dx) / 2;
-      path.cubicTo(controlX, p0.dy, controlX, p1.dy, p1.dx, p1.dy);
+    final List<Offset> points = [];
+    for (int i = 0; i < activeData.length; i++) {
+      final val = activeData[i];
+      // Normalize val between 20 and 120 (0.0 to 1.0)
+      final norm = ((val - 20) / (120 - 20)).clamp(0.0, 1.0);
+      final y = (h - 24) - norm * (h - 24 - 15);
+      final x = startX + i * stepX;
+      points.add(Offset(x, y));
     }
 
-    // Gradient Fill Path under curve
-    final fillPath = Path.from(path);
-    fillPath.lineTo(points.last.dx, h - 24);
-    fillPath.lineTo(points.first.dx, h - 24);
-    fillPath.close();
+    if (points.isNotEmpty) {
+      final path = Path();
+      path.moveTo(points.first.dx, points.first.dy);
 
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          AppColors.lightMint.withAlpha(70),
-          AppColors.lightMint.withAlpha(0),
-        ],
-      ).createShader(Rect.fromLTRB(startX, 0, w, h - 24));
+      if (points.length == 1) {
+        path.lineTo(points.first.dx + 1, points.first.dy);
+      } else {
+        for (int i = 0; i < points.length - 1; i++) {
+          final p0 = points[i];
+          final p1 = points[i + 1];
+          final controlX = (p0.dx + p1.dx) / 2;
+          path.cubicTo(controlX, p0.dy, controlX, p1.dy, p1.dx, p1.dy);
+        }
+      }
 
-    canvas.drawPath(fillPath, fillPaint);
+      // Gradient Fill Path under curve
+      final fillPath = Path.from(path);
+      fillPath.lineTo(points.last.dx, h - 24);
+      fillPath.lineTo(points.first.dx, h - 24);
+      fillPath.close();
 
-    // Draw Smooth Line Stroke
-    final linePaint = Paint()
-      ..color = AppColors.lightMint
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round;
+      final fillPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.lightMint.withAlpha(70),
+            AppColors.lightMint.withAlpha(0),
+          ],
+        ).createShader(Rect.fromLTRB(startX, 0, w, h - 24));
 
-    canvas.drawPath(path, linePaint);
+      canvas.drawPath(fillPath, fillPaint);
 
-    // Point Dot & Badge Tooltip on Last Highlight Point (78 score badge)
-    final peakPoint = points.last;
+      // Draw Smooth Line Stroke
+      final linePaint = Paint()
+        ..color = AppColors.lightMint
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round;
 
-    // Outer glow dot
-    canvas.drawCircle(
-      peakPoint,
-      5.0,
-      Paint()..color = AppColors.white,
-    );
+      canvas.drawPath(path, linePaint);
 
-    // Badge Container ("78") above peak point
-    const badgeWidth = 36.0;
-    const badgeHeight = 22.0;
-    final badgeOffset = Offset(
-      peakPoint.dx - badgeWidth / 2,
-      peakPoint.dy - badgeHeight - 8,
-    );
+      // Draw dots for each measurement point
+      for (final pt in points) {
+        canvas.drawCircle(
+          pt,
+          3.0,
+          Paint()..color = AppColors.lightMint,
+        );
+      }
 
-    final badgeRRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        badgeOffset.dx,
-        badgeOffset.dy,
-        badgeWidth,
-        badgeHeight,
-      ),
-      const Radius.circular(8),
-    );
+      // Point Dot & Badge Tooltip on Last Highlight Point
+      final lastPoint = points.last;
+      final latestValue = activeData.last;
 
-    canvas.drawRRect(
-      badgeRRect,
-      Paint()..color = AppColors.white,
-    );
+      canvas.drawCircle(
+        lastPoint,
+        5.0,
+        Paint()..color = AppColors.white,
+      );
 
-    // Badge Text "78"
-    const badgeTextSpan = TextSpan(
-      text: '78',
-      style: TextStyle(
-        fontFamily: AppFonts.pretendard,
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
-        color: AppColors.darkBg,
-      ),
-    );
-    final badgePainter = TextPainter(
-      text: badgeTextSpan,
-      textDirection: TextDirection.ltr,
-    );
-    badgePainter.layout();
-    badgePainter.paint(
-      canvas,
-      Offset(
-        badgeOffset.dx + (badgeWidth - badgePainter.width) / 2,
-        badgeOffset.dy + (badgeHeight - badgePainter.height) / 2,
-      ),
-    );
+      const badgeWidth = 36.0;
+      const badgeHeight = 22.0;
+      final badgeOffset = Offset(
+        (lastPoint.dx - badgeWidth / 2).clamp(startX, w - badgeWidth),
+        (lastPoint.dy - badgeHeight - 8).clamp(0.0, h - 24),
+      );
+
+      final badgeRRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          badgeOffset.dx,
+          badgeOffset.dy,
+          badgeWidth,
+          badgeHeight,
+        ),
+        const Radius.circular(8),
+      );
+
+      canvas.drawRRect(
+        badgeRRect,
+        Paint()..color = AppColors.white,
+      );
+
+      final badgeTextSpan = TextSpan(
+        text: '$latestValue',
+        style: const TextStyle(
+          fontFamily: AppFonts.pretendard,
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+          color: AppColors.darkBg,
+        ),
+      );
+      final badgePainter = TextPainter(
+        text: badgeTextSpan,
+        textDirection: TextDirection.ltr,
+      );
+      badgePainter.layout();
+      badgePainter.paint(
+        canvas,
+        Offset(
+          badgeOffset.dx + (badgeWidth - badgePainter.width) / 2,
+          badgeOffset.dy + (badgeHeight - badgePainter.height) / 2,
+        ),
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _HrLineChartPainter oldDelegate) =>
+      oldDelegate.hrList != hrList;
 }

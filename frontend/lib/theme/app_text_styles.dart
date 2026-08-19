@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 class AppFonts {
@@ -9,39 +8,45 @@ class AppFonts {
 
 /// Design system text style constants with clean fallbacks.
 class AppTextStyles {
-  // Korean (Pretendard / Google Font fallback)
-  static TextStyle pretendardTitle = GoogleFonts.notoSansKr(
+  // Korean (Pretendard)
+  static const TextStyle pretendardTitle = TextStyle(
+    fontFamily: AppFonts.pretendard,
     fontSize: 20,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w400,
     color: AppColors.white,
   );
 
-  static TextStyle pretendardSubtitle = GoogleFonts.notoSansKr(
+  static const TextStyle pretendardSubtitle = TextStyle(
+    fontFamily: AppFonts.pretendard,
     fontSize: 16,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
     color: AppColors.white,
   );
 
-  static TextStyle pretendardBody = GoogleFonts.notoSansKr(
+  static const TextStyle pretendardBody = TextStyle(
+    fontFamily: AppFonts.pretendard,
     fontSize: 14,
     fontWeight: FontWeight.w400,
     color: AppColors.lightGray,
   );
 
-  // English (GmarketSans / Google Font fallback)
-  static TextStyle gmarketTitle = GoogleFonts.outfit(
+  // English (GmarketSans)
+  static const TextStyle gmarketTitle = TextStyle(
+    fontFamily: AppFonts.gmarketSans,
     fontSize: 20,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w400,
     color: AppColors.white,
   );
 
-  static TextStyle gmarketSubtitle = GoogleFonts.outfit(
+  static const TextStyle gmarketSubtitle = TextStyle(
+    fontFamily: AppFonts.gmarketSans,
     fontSize: 16,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w400,
     color: AppColors.white,
   );
 
-  static TextStyle gmarketBody = GoogleFonts.outfit(
+  static const TextStyle gmarketBody = TextStyle(
+    fontFamily: AppFonts.gmarketSans,
     fontSize: 14,
     fontWeight: FontWeight.w400,
     color: AppColors.lightGray,

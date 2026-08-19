@@ -10,17 +10,23 @@ import '../theme/app_text_styles.dart';
 class AddScheduleModal extends StatefulWidget {
   final DateTime? initialDate;
   final Function(Map<String, dynamic>)? onScheduleAdded;
+  final Map<String, dynamic>? initialSchedule;
+  final Function(Map<String, dynamic>)? onScheduleUpdated;
 
   const AddScheduleModal({
     super.key,
     this.initialDate,
     this.onScheduleAdded,
+    this.initialSchedule,
+    this.onScheduleUpdated,
   });
 
   static Future<void> show(
     BuildContext context, {
     DateTime? initialDate,
     Function(Map<String, dynamic>)? onScheduleAdded,
+    Map<String, dynamic>? initialSchedule,
+    Function(Map<String, dynamic>)? onScheduleUpdated,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -29,6 +35,8 @@ class AddScheduleModal extends StatefulWidget {
       builder: (context) => AddScheduleModal(
         initialDate: initialDate,
         onScheduleAdded: onScheduleAdded,
+        initialSchedule: initialSchedule,
+        onScheduleUpdated: onScheduleUpdated,
       ),
     );
   }
@@ -38,11 +46,10 @@ class AddScheduleModal extends StatefulWidget {
 }
 
 class _AddScheduleModalState extends State<AddScheduleModal> {
-  final TextEditingController _titleController =
-      TextEditingController(text: '프로젝트 최종 발표');
+  late final TextEditingController _titleController;
 
-  DateTime _selectedDate = DateTime(2026, 8, 25);
-  DateTime _currentDisplayMonth = DateTime(2026, 8, 1);
+  DateTime _selectedDate = DateTime.now();
+  DateTime _currentDisplayMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   TimeOfDay _selectedTime = const TimeOfDay(hour: 14, minute: 30);
 
   bool _isDateExpanded = false;
@@ -67,10 +74,55 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
   @override
   void initState() {
     super.initState();
+
+    final now = DateTime.now();
+    _selectedDate = DateTime(now.year, now.month, now.day);
+    _currentDisplayMonth = DateTime(now.year, now.month, 1);
+
     if (widget.initialDate != null) {
       _selectedDate = widget.initialDate!;
       _currentDisplayMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
     }
+
+    if (widget.initialSchedule != null) {
+      final schedule = widget.initialSchedule!;
+      _titleController = TextEditingController(text: schedule['title'] as String? ?? '');
+
+      final cat = schedule['category'] as String? ?? '발표';
+      if (_categories.contains(cat)) {
+        _selectedCategoryIndex = _categories.indexOf(cat);
+      } else {
+        _categories.add(cat);
+        _selectedCategoryIndex = _categories.length - 1;
+      }
+
+      if (schedule['date'] is DateTime) {
+        _selectedDate = schedule['date'] as DateTime;
+        _currentDisplayMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+      }
+
+      if (schedule['time'] is String) {
+        _selectedTime = _parseTimeString(schedule['time'] as String);
+      }
+    } else {
+      _titleController = TextEditingController(text: '프로젝트 최종 발표');
+    }
+  }
+
+  TimeOfDay _parseTimeString(String timeStr) {
+    try {
+      final parts = timeStr.split(' ');
+      if (parts.length == 2) {
+        final isPm = parts[0] == '오후';
+        final timeParts = parts[1].split(':');
+        int hour = int.parse(timeParts[0]);
+        final minute = int.parse(timeParts[1]);
+        if (isPm && hour < 12) hour += 12;
+        if (!isPm && hour == 12) hour = 0;
+        return TimeOfDay(hour: hour, minute: minute);
+      }
+    } catch (_) {}
+    return const TimeOfDay(hour: 14, minute: 30);
   }
 
   @override
@@ -96,6 +148,20 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
     if (!ApiClient.instance.isLoggedIn) {
       _showError('일정을 저장하려면 로그인이 필요해요.');
       return;
+    }
+
+    final scheduleData = {
+      'title': title,
+      'category': _categories[_selectedCategoryIndex],
+      'date': _selectedDate,
+      'time': _formattedTimeString,
+      'isCompleted': widget.initialSchedule?['isCompleted'] ?? false,
+    };
+
+    if (widget.initialSchedule != null && widget.onScheduleUpdated != null) {
+      widget.onScheduleUpdated!(scheduleData);
+    } else if (widget.onScheduleAdded != null) {
+      widget.onScheduleAdded!(scheduleData);
     }
 
     final category = _categories[_selectedCategoryIndex];
@@ -262,7 +328,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                         style: TextStyle(
                           fontFamily: AppFonts.pretendard,
                           fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w400,
                           color: AppColors.lightGray,
                         ),
                       ),
@@ -276,7 +342,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                         style: TextStyle(
                           fontFamily: AppFonts.pretendard,
                           fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w400,
                           color: AppColors.lightGray,
                         ),
                       ),
@@ -294,7 +360,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                         style: TextStyle(
                           fontFamily: AppFonts.pretendard,
                           fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w400,
                           color: AppColors.lightGray,
                         ),
                       ),
@@ -304,11 +370,11 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                         const SizedBox(height: 10),
                         _buildInlineTimePicker(),
                       ],
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 36),
 
                       // 5. Bottom Crystal Polygon Icon & Subtext
                       _buildBottomHintSection(),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 52),
                     ],
                   ),
                 ),
@@ -398,7 +464,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
         style: const TextStyle(
           fontFamily: AppFonts.pretendard,
           fontSize: 15,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w400,
           color: AppColors.white,
         ),
         decoration: InputDecoration(
@@ -468,7 +534,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                     style: TextStyle(
                       fontFamily: AppFonts.pretendard,
                       fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isSelected ? FontWeight.w400 : FontWeight.w400,
                       color: isSelected ? AppColors.darkBg : AppColors.lightGray,
                     ),
                   ),
@@ -520,7 +586,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
               children: [
                 const Icon(
                   Icons.calendar_today_outlined,
-                  color: AppColors.lightGray,
+                  color: Color(0xFF90939A),
                   size: 20,
                 ),
                 const SizedBox(width: 14),
@@ -529,8 +595,8 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                   style: const TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.white,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white,
                   ),
                 ),
               ],
@@ -538,8 +604,8 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
             Icon(
               _isDateExpanded
                   ? Icons.keyboard_arrow_up_rounded
-                  : Icons.keyboard_arrow_down_rounded,
-              color: AppColors.lightGray,
+                  : Icons.chevron_right_rounded,
+              color: const Color(0xFF90939A),
               size: 22,
             ),
           ],
@@ -584,7 +650,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                   });
                 },
                 icon: const Icon(Icons.chevron_left_rounded,
-                    color: AppColors.lightGray, size: 22),
+                    color: Color(0xFF90939A), size: 22),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -593,8 +659,8 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                 style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.white,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
                 ),
               ),
               IconButton(
@@ -608,7 +674,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                   });
                 },
                 icon: const Icon(Icons.chevron_right_rounded,
-                    color: AppColors.lightGray, size: 22),
+                    color: Color(0xFF90939A), size: 22),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -628,7 +694,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                   style: const TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 12,
-                    color: AppColors.slateGray,
+                    color: Color(0xFF90939A),
                   ),
                 ),
               );
@@ -669,20 +735,20 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                 child: Center(
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    width: 34,
-                    height: 34,
+                    width: 38,
+                    height: 38,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: isSelected ? AppColors.lightMint : Colors.transparent,
+                      color: isSelected ? const Color(0xFFE4FBCB) : Colors.transparent,
                       shape: BoxShape.circle,
                     ),
                     child: Text(
                       '$dayNum',
                       style: TextStyle(
                         fontFamily: AppFonts.pretendard,
-                        fontSize: 14,
-                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                        color: isSelected ? AppColors.darkBg : AppColors.white,
+                        fontSize: 15,
+                        fontWeight: isSelected ? FontWeight.w400 : FontWeight.w400,
+                        color: isSelected ? const Color(0xFF1E1E20) : Colors.white,
                       ),
                     ),
                   ),
@@ -717,7 +783,7 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
               children: [
                 const Icon(
                   Icons.access_time_outlined,
-                  color: AppColors.lightGray,
+                  color: Color(0xFF90939A),
                   size: 20,
                 ),
                 const SizedBox(width: 14),
@@ -726,8 +792,8 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
                   style: const TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.white,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white,
                   ),
                 ),
               ],
@@ -735,8 +801,8 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
             Icon(
               _isTimeExpanded
                   ? Icons.keyboard_arrow_up_rounded
-                  : Icons.keyboard_arrow_down_rounded,
-              color: AppColors.lightGray,
+                  : Icons.chevron_right_rounded,
+              color: const Color(0xFF90939A),
               size: 22,
             ),
           ],
@@ -881,23 +947,29 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
 
   /// 6. Bottom Hint Graphic & Subtext
   Widget _buildBottomHintSection() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Mint Crystal Geometric Polyhedron
-          _MintCrystalGraphic(size: 52),
-          SizedBox(height: 14),
+          // Mint Crystal Geometric Polyhedron Asset Image
+          Image.asset(
+            'assets/images/crystal_icon.png',
+            width: 52,
+            height: 52,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const _MintCrystalGraphic(size: 52),
+          ),
+          const SizedBox(height: 14),
 
-          Text(
+          const Text(
             '선택한 일정 전, 맞춤 호흡 타이밍을\n자동으로 제안해드려요.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 13,
               fontWeight: FontWeight.w400,
-              color: AppColors.slateGray,
+              color: Color(0xFF90939A),
               height: 1.5,
             ),
           ),

@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-08-19T00:48:15Z",
+  "device_info": "Samsung Galaxy Z Flip4 (SM-F721N)",
+  "sensor_type": "Camera PPG",
+  "signal_quality": "POOR_UNSTABLE",
+  "confidence_score": 0.31,
+  "error_code": "ERR_MOTION_OR_LIGHT_LEAK",
+  "error_message": "손가락 움직임 감지 또는 후면 카메라 플래시 빛 누출로 인하여 생체 피크 검출에 실패했습니다.",
+  "calculated_metrics": {
+    "bpm": null,
+    "hrv_sdnn_ms": null,
+    "signal_quality": "Poor"
+  },
+  "raw_signal_samples": [
+    {"t_ms": 0, "red_avg": 142.1, "green_avg": 105.4, "blue_avg": 88.2},
+    {"t_ms": 33, "red_avg": 89.4, "green_avg": 72.1, "blue_avg": 54.0},
+    {"t_ms": 66, "red_avg": 240.2, "green_avg": 190.5, "blue_avg": 160.1},
+    {"t_ms": 99, "red_avg": 55.1, "green_avg": 30.2, "blue_avg": 20.0}
+  ]
+}
