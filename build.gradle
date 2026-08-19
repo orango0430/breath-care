@@ -58,6 +58,12 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 
+    // 보정용 파형 폴더를 테스트 JVM으로 넘긴다. 그레이들 JVM에 준 -D는 저절로 전달되지 않는다.
+    // 예: ./gradlew test --tests '*PpgCalibrationTest' -Dcalibration.dir=C:/파형
+    if (System.getProperty('calibration.dir')) {
+        systemProperty 'calibration.dir', System.getProperty('calibration.dir')
+    }
+
     def agent = configurations.mockitoAgent
     jvmArgumentProviders.add(new CommandLineArgumentProvider() {
         @Override
