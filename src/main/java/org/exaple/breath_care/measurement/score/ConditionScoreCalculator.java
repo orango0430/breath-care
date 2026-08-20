@@ -22,11 +22,28 @@ package org.exaple.breath_care.measurement.score;
  */
 public final class ConditionScoreCalculator {
 
-    /** 기울기. HRV 1ms당 점수 증가폭. [튜닝 대상] */
-    private static final double SLOPE = 1.4;
+    /**
+     * 로그 척도의 기울기·절편. HRV <b>배수</b>당 점수 증가폭이다. [튜닝 대상]
+     *
+     * <p>선형이었다가 바꿨다. {@code SDNN × 1.4 + 40}은 <b>40ms에서 상한 96에 닿아서</b>,
+     * 그 위는 전부 96점이었다. 실기기로 재면 계속 96만 나왔다 — 20초 측정의 SDNN이
+     * 대체로 그 위에 있고, 간격 이상치를 ±30%까지 받아 주므로 흔들림만으로도 쉽게
+     * 100ms를 넘기기 때문이다. 모두가 만점이면 지표가 아니다.
+     *
+     * <p>로그를 쓰는 이유는 HRV의 분포가 그렇게 생겼기 때문이다. 사람 사이 차이가
+     * 절대값이 아니라 배수로 벌어져서, 15ms와 30ms의 간격이 100ms와 115ms의 간격보다
+     * 훨씬 크게 느껴진다. 앵커는 {@code 15ms→55점}, {@code 120ms→94점} 두 개다.
+     *
+     * <p>중간값은 이렇게 간다: 30ms 66점, 40ms 73점, 60ms 81점, 100ms 91점.
+     * 상한에 닿는 건 170ms 부근이라, 생리학적으로 말이 되는 범위에서는 천장을 치지
+     * 않는다. <b>앵커 자체는 여전히 실측으로 확인할 자리표시다.</b>
+     */
+    private static final double LOG_SLOPE = 18.76;
 
-    /** 절편. HRV가 0일 때의 점수. [튜닝 대상] */
-    private static final double INTERCEPT = 40.0;
+    private static final double LOG_INTERCEPT = 4.2;
+
+    /** 로그를 취할 수 없는 값의 하한. 이 아래는 전부 최저점으로 본다. */
+    private static final double MIN_HRV_MS = 1.0;
 
     /** 하한. 아무리 나빠도 이 아래로는 안 내려간다. [튜닝 대상] */
     private static final double MIN_SCORE = 50.0;
@@ -48,7 +65,7 @@ public final class ConditionScoreCalculator {
             return null;
         }
 
-        double raw = hrvSdnn * SLOPE + INTERCEPT;
+        double raw = LOG_SLOPE * Math.log(Math.max(MIN_HRV_MS, hrvSdnn)) + LOG_INTERCEPT;
         double clamped = Math.min(MAX_SCORE, Math.max(MIN_SCORE, raw));
 
         // 소수 첫째 자리로 끊는다. 안 하면 23.4 * 1.4 + 40 이 72.75999999999999로 나가서

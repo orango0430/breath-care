@@ -37,10 +37,28 @@ class ConditionScoreCalculatorTest {
     }
 
     @Test
-    @DisplayName("설계 앵커: SDNN 27ms가 78점 근처로 간다")
-    void anchorPoint() {
-        // 27 × 1.4 + 40 = 77.8. 계수를 바꾸면 이 앵커도 같이 옮겨야 한다.
-        assertThat(ConditionScoreCalculator.score(27.0)).isCloseTo(77.8, org.assertj.core.data.Offset.offset(0.01));
+    @DisplayName("설계 앵커: SDNN 15ms가 55점, 120ms가 94점")
+    void anchorPoints() {
+        // 로그 매핑을 고정하는 두 점이다. 계수를 바꾸면 여기부터 깨진다.
+        assertThat(ConditionScoreCalculator.score(15.0))
+                .isCloseTo(55.0, org.assertj.core.data.Offset.offset(0.2));
+        assertThat(ConditionScoreCalculator.score(120.0))
+                .isCloseTo(94.0, org.assertj.core.data.Offset.offset(0.2));
+    }
+
+    @Test
+    @DisplayName("실기기에서 흔한 SDNN 대역이 만점에 붙지 않는다")
+    void doesNotSaturateInTheRealWorldBand() {
+        // 선형이던 시절 40ms부터 전부 96점이었다. 실기기로 재면 계속 96만 나와서
+        // 지표 구실을 못 했다. 이 대역이 갈라지는지가 이 변경의 핵심이다.
+        Double at40 = ConditionScoreCalculator.score(40.0);
+        Double at60 = ConditionScoreCalculator.score(60.0);
+        Double at100 = ConditionScoreCalculator.score(100.0);
+
+        assertThat(at40).isLessThan(90.0);
+        assertThat(at40).isLessThan(at60);
+        assertThat(at60).isLessThan(at100);
+        assertThat(at100).isLessThan(96.0);
     }
 
     /**
@@ -51,8 +69,8 @@ class ConditionScoreCalculatorTest {
     @DisplayName("소수 첫째 자리까지만 낸다 — 부동소수점 찌꺼기를 흘리지 않는다")
     void roundsToOneDecimal() {
         // 23.4 * 1.4 + 40 은 double로 계산하면 72.75999999999999가 된다
-        assertThat(ConditionScoreCalculator.score(23.4)).isEqualTo(72.8);
-        assertThat(ConditionScoreCalculator.score(19.6)).isEqualTo(67.4);
+        assertThat(ConditionScoreCalculator.score(23.4)).isEqualTo(63.3);
+        assertThat(ConditionScoreCalculator.score(19.6)).isEqualTo(60.0);
     }
 
     @Test
@@ -64,18 +82,21 @@ class ConditionScoreCalculatorTest {
     }
 
     /**
-     * 지금 공식의 가장 큰 약점을 못으로 박아 둔다.
+     * 예전 공식의 가장 큰 약점을 못으로 박아 뒀던 자리다.
      *
-     * <p>SDNN 40ms 위는 전부 96점이다. 그런데 성인 휴식기 정상값이라고 알려진 범위가
-     * 단기 기록 기준 30~50ms라, <b>건강한 사람일수록 서로 구별이 안 된다.</b>
-     * 실측 파형을 받아 20초 측정에서 SDNN이 실제로 어느 대역에 떨어지는지 보고
-     * 상한을 올리거나 기울기를 낮춰야 한다. 그때 이 테스트를 고치는 것이 곧 그 작업이다.
+     * <p>{@code SDNN × 1.4 + 40} 시절에는 40ms 위가 전부 96점이었다. 실기기로 재 보니
+     * 20초 측정의 SDNN은 대체로 그 위에 있어서, <b>몇 번을 재도 96점만 나왔다.</b>
+     * 로그 매핑으로 바꾼 뒤 이 테스트는 "뭉개지는가"가 아니라 "갈라지는가"를 본다.
      */
     @Test
-    @DisplayName("[알려진 한계] SDNN 40 이상은 전부 같은 점수로 뭉개진다")
-    void saturatesAboveFortyMs() {
-        assertThat(ConditionScoreCalculator.score(40.0)).isEqualTo(96.0);
-        assertThat(ConditionScoreCalculator.score(55.0)).isEqualTo(96.0);
-        assertThat(ConditionScoreCalculator.score(65.0)).isEqualTo(96.0);
+    @DisplayName("SDNN 40~65 구간이 서로 다른 점수로 갈린다")
+    void separatesTheBandThatUsedToSaturate() {
+        Double at40 = ConditionScoreCalculator.score(40.0);
+        Double at55 = ConditionScoreCalculator.score(55.0);
+        Double at65 = ConditionScoreCalculator.score(65.0);
+
+        assertThat(at40).isLessThan(at55);
+        assertThat(at55).isLessThan(at65);
+        assertThat(at65).isLessThan(96.0);
     }
 }
