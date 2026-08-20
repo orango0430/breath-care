@@ -291,6 +291,10 @@ class _ConditionMeasurementScreenState
     _measurementTimer?.cancel();
     _measurementTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
+      // 손가락이 렌즈에서 떼어져 있으면 타이머 카운트다운 일시 정지!
+      if (!kIsWeb && !_isFingerCovered) {
+        return;
+      }
       setState(() {
         if (_secondsLeft > 1) {
           _secondsLeft--;
