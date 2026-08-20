@@ -1,5 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -7,10 +5,12 @@ import 'api_exception.dart';
 
 /// Turns a "Google로 계속하기" tap into a token our server accepts.
 ///
-/// Two tokens are involved and they are not interchangeable. Google hands back
-/// its own ID token; the server calls `FirebaseAuth.verifyIdToken`, which only
-/// accepts a **Firebase** ID token. So the Google token is exchanged for a
-/// Firebase session first, and it is that session's token we send on.
+/// The token goes to the server exactly as Google issued it. There used to be
+/// a Firebase Auth exchange in the middle — sign in to Firebase with the Google
+/// credential, then send Firebase's own token, because that is what the server
+/// knew how to check. It added two round trips and three ways to fail, and it
+/// tied signing in to Firebase Auth being configured. The server verifies
+/// Google's signature directly now, so none of that is in the path.
 class GoogleAuth {
   const GoogleAuth._();
 
@@ -26,21 +26,13 @@ class GoogleAuth {
 
   static bool _initialized = false;
 
-  /// Returns a Firebase ID token, or null when the user backed out.
+  /// Returns Google's ID token, or null when the user backed out.
   ///
   /// Throws [ApiException] when sign-in itself fails, so the caller can show
-  /// the message as-is.
+  /// the message as-is. The parenthesised codes are deliberate: the only person
+  /// who can retry this is holding a phone with no debugger attached, so the
+  /// message has to carry enough to say which step gave up.
   Future<String?> idToken() async {
-    // The parenthesised codes are deliberate. The only person who can retry
-    // this is holding a phone with no debugger attached, so the message has to
-    // carry enough to say which step gave up.
-    if (Firebase.apps.isEmpty) {
-      throw const ApiException(
-        ApiException.socialUnavailable,
-        '구글 로그인을 사용할 수 없어요. (E1 Firebase없음)',
-      );
-    }
-
     try {
       if (!_initialized) {
         await GoogleSignIn.instance.initialize(serverClientId: _serverClientId);
@@ -56,35 +48,18 @@ class GoogleAuth {
         );
       }
 
-      final credential = GoogleAuthProvider.credential(idToken: googleIdToken);
-      final result =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-
-      // Not `getIdToken()` on a cached user — this one was just minted, so it
-      // is guaranteed fresh for the round trip to our server.
-      final firebaseToken = await result.user?.getIdToken();
-      if (firebaseToken == null || firebaseToken.isEmpty) {
-        throw const ApiException(
-          ApiException.socialUnavailable,
-          '구글 로그인에 실패했어요. (E4 토큰없음)',
-        );
-      }
-      debugPrint('Firebase ID token length: ${firebaseToken.length}');
-      return firebaseToken;
+      // Straight to our server. The Google token used to be swapped for a
+      // Firebase one first, because that is what the server verified — two
+      // extra round trips through Firebase Auth, and every one of them a place
+      // for the login to die. The server now checks Google's signature itself.
+      debugPrint('Google ID token length: ${googleIdToken.length}');
+      return googleIdToken;
     } on GoogleSignInException catch (e) {
       // Backing out of the account picker is a normal thing to do, not a
       // failure worth showing a red banner for.
       if (e.code == GoogleSignInExceptionCode.canceled) return null;
       debugPrint('GoogleSignInException: ${e.code} ${e.description}');
       throw ApiException(ApiException.socialUnavailable, _messageFor(e));
-    } on FirebaseAuthException catch (e) {
-      debugPrint('FirebaseAuthException: ${e.code} ${e.message}');
-      throw ApiException(
-        ApiException.socialUnavailable,
-        e.code == 'operation-not-allowed'
-            ? '구글 로그인이 아직 열려 있지 않아요. (E3 제공자꺼짐)'
-            : '구글 로그인에 실패했어요. (E3 ${e.code})',
-      );
     }
   }
 
@@ -93,7 +68,6 @@ class GoogleAuth {
   Future<void> signOut() async {
     try {
       await GoogleSignIn.instance.signOut();
-      await FirebaseAuth.instance.signOut();
     } catch (_) {
       // Nothing the user can do about it, and they are being logged out
       // locally either way.

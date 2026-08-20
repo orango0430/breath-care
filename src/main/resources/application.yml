@@ -29,6 +29,13 @@ jwt:
   secret: ${JWT_SECRET}
   access-token-validity-ms: 3600000
 
+google:
+  # 앱이 보내는 구글 ID 토큰의 aud로 인정할 클라이언트 id. 쉼표로 여러 개 준다.
+  # 앱이 serverClientId로 넘기는 웹 클라이언트(client_type 3)가 보통의 aud이고,
+  # 기기 설정에 따라 안드로이드 클라이언트(client_type 1)로 오기도 해서 둘 다 둔다.
+  # 비밀값이 아니다. 둘 다 google-services.json에 들어 있고 APK와 함께 배포된다.
+  client-ids: ${GOOGLE_CLIENT_IDS:830896594990-cgu36rgv13olqegmgf5496q52pmrkqrs.apps.googleusercontent.com,830896594990-sfus9c1ag7dh2hc51t35omud1m2dul1n.apps.googleusercontent.com}
+
 firebase:
   # 서비스 계정 키가 없는 팀원도 앱을 띄울 수 있도록 기본값은 꺼짐.
   # 켜면 LoggingPushSender 대신 FcmPushSender가 등록된다.

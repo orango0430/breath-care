@@ -474,12 +474,21 @@ class PpgSensorService {
     // can measure a raw spread in the forties. Dividing by the mean cancels
     // that out: the emulator's room sits at 0.43 (45 over 104) while a covered
     // lens stays well under 0.2 however bright it is.
+    // Measured on a real fingertip against the torch: 붉은기 97, V 245,
+    // evenness 0.27. The emulator's room, the nearest thing to a false
+    // positive anyone has produced: 22, 140, 0.43.
+    //
+    // So colour decides. The two cases are four times apart on 붉은기 and the
+    // thresholds sit in the gap with room on both sides. Evenness is kept only
+    // as a loose sanity check — it was doing the deciding at 0.28, which a real
+    // finger cleared by a hundredth, so contact flickered frame to frame and
+    // the measurement never held.
     final evenness = avgY <= 0 ? 1.0 : spread / avgY;
-    final looksLikeSkin = chromDiff > 20.0 && avgV > 132.0 && evenness < 0.28;
+    final looksLikeSkin = chromDiff > 35.0 && avgV > 150.0 && evenness < 0.45;
     // Deliberately looser than the entry bar. Once contact is established, a
     // momentary dip from pressure or a shifting finger should not throw away
     // the measurement in progress.
-    final clearlyGone = chromDiff < 12.0 || avgV < 122.0 || evenness > 0.45;
+    final clearlyGone = chromDiff < 20.0 || avgV < 135.0 || evenness > 0.60;
 
     if (!isFingerDetected) {
       _contactFrames = looksLikeSkin ? _contactFrames + 1 : 0;

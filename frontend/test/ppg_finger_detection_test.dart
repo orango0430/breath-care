@@ -29,16 +29,26 @@ void main() {
     }
   }
 
+  test('실기기에서 잰 손가락 값이 인식된다', () {
+    // Measured on a real phone: 붉은기 97, V 245, Y 160, evenness 0.27.
+    // Every threshold has to clear this by a margin, not by a hundredth.
+    feed(service, diff: 97, v: 245, spread: 43, y: 160);
+    expect(service.isFingerDetected, isTrue);
+  });
+
   test('손가락을 올리면 인식된다', () {
     feed(service, diff: 60, v: 190, spread: 8);
     expect(service.isFingerDetected, isTrue);
   });
 
-  test('AWB가 붉은기를 빼도 인식된다', () {
-    // The case that broke on a real phone: auto white balance drags the red
-    // cast back toward neutral a second after the torch comes on, and the old
-    // `chromDiff > 45 && avgV > 150` test never fired again.
-    feed(service, diff: 24, v: 138, spread: 12);
+  test('측정 중 붉은기가 빠져도 인식이 유지된다', () {
+    // Auto white balance drags the red cast back toward neutral while the
+    // torch settles. Latching needs a clear signal, but holding must not — a
+    // measurement in progress should survive the drift.
+    feed(service, diff: 97, v: 245, spread: 43, y: 160);
+    expect(service.isFingerDetected, isTrue);
+
+    feed(service, diff: 24, v: 140, spread: 20, y: 150, frames: 20);
     expect(service.isFingerDetected, isTrue);
   });
 
