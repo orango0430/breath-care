@@ -55,9 +55,33 @@ public class FirebaseSocialTokenVerifier implements SocialTokenVerifier {
             // 양쪽 프로젝트 id를 그대로 알려주는데, 이게 없으면 소셜 로그인이 전부
             // 실패할 때 서비스 계정이 다른 프로젝트 것인지 확인할 방법이 없다.
             // 두 id 모두 앱에 이미 들어 있는 공개 값이라 로그에 남겨도 문제없다.
-            log.warn("소셜 토큰 검증 실패 [{}]: {}", e.getAuthErrorCode(), e.getMessage());
+            log.warn("소셜 토큰 검증 실패 [{}]: {} | 토큰 모양={}",
+                    e.getAuthErrorCode(), e.getMessage(), shapeOf(idToken));
             throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
         }
+    }
+
+    /**
+     * 토큰의 "모양"만 남긴다. 내용은 찍지 않는다.
+     *
+     * <p>서명 검증만 실패하는 경우(aud·iss·만료는 통과) 원인이 둘로 갈린다.
+     * 전송 중 잘려서 서명 부분이 깨졌거나, 서명한 키를 서버가 못 찾거나.
+     * 세 토막의 길이를 보면 앞쪽인지 뒤쪽인지 바로 갈린다 — 정상적인 Firebase ID
+     * 토큰은 대략 900~1200자에 서명 토막이 342자다.
+     */
+    private String shapeOf(String idToken) {
+        if (idToken == null) {
+            return "null";
+        }
+        String[] parts = idToken.split("\\.");
+        StringBuilder lengths = new StringBuilder();
+        for (String part : parts) {
+            if (!lengths.isEmpty()) {
+                lengths.append('/');
+            }
+            lengths.append(part.length());
+        }
+        return "전체 %d자, %d토막(%s)".formatted(idToken.length(), parts.length, lengths);
     }
 
     /**

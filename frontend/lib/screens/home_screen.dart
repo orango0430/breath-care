@@ -210,15 +210,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Profile Avatar Icon Button
+  ///
+  /// Says "로그인" outright when signed out. The app opens straight to this
+  /// screen as a guest, so an unlabelled person icon was the only way in to
+  /// signing up — and nobody reads a grey circle as "create an account".
   Widget _buildProfileAvatar() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const MyPageScreen(),
+    if (!ApiClient.instance.isLoggedIn) {
+      return GestureDetector(
+        onTap: _openMyPage,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: AppColors.slateDarkGray.withAlpha(150),
+            borderRadius: BorderRadius.circular(19),
+            border: Border.all(color: AppColors.slateDarkGray, width: 1),
           ),
-        );
-      },
+          child: const Text(
+            '로그인',
+            style: TextStyle(
+              fontFamily: AppFonts.pretendard,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.white,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _openMyPage,
       child: Container(
         width: 38,
         height: 38,
@@ -237,6 +259,18 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  /// Opens 마이페이지 and redraws on the way back, so the header flips between
+  /// "로그인" and the avatar as soon as the user signs in or out.
+  Future<void> _openMyPage() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const MyPageScreen()),
+    );
+    if (!mounted) return;
+    setState(() {});
+    _loadLatestMeasurement();
+    _loadHomeSchedules();
   }
 
   /// 2. Title and Dynamic Date Section
