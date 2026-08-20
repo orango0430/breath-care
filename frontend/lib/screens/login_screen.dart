@@ -85,6 +85,22 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Leaves the login screen without ever emptying the navigator.
+  ///
+  /// Popping the last route shows a black screen with no way back, which is
+  /// what happened when login was reached as the app's only route. Guests can
+  /// use the app, so falling back to home is also the right destination.
+  void _onBackPressed() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    navigator.pushReplacement(
+      MaterialPageRoute(builder: (context) => const HomeScreen()),
+    );
+  }
+
   Future<void> _onGooglePressed() async {
     if (_isSubmitting) return;
 
@@ -120,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Row(
                 children: [
                   IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: _onBackPressed,
                     icon: const Icon(
                       Icons.chevron_left_rounded,
                       color: AppColors.white,

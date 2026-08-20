@@ -49,8 +49,13 @@ public class FirebaseSocialTokenVerifier implements SocialTokenVerifier {
             return firebaseAuth.verifyIdToken(idToken);
         } catch (FirebaseAuthException e) {
             // 만료·위조·다른 프로젝트의 토큰이 모두 여기로 온다.
-            // 어느 쪽인지 알려주면 토큰을 맞춰 보는 데 힌트가 되므로 구분하지 않는다.
-            log.debug("소셜 토큰 검증 실패: {}", e.getAuthErrorCode(), e);
+            // 사용자에게는 어느 쪽인지 알려주지 않는다. 토큰을 맞춰 보는 힌트가 되기 때문이다.
+            //
+            // 다만 서버 로그에는 남긴다. SDK 메시지가 "Expected X but got Y" 형태로
+            // 양쪽 프로젝트 id를 그대로 알려주는데, 이게 없으면 소셜 로그인이 전부
+            // 실패할 때 서비스 계정이 다른 프로젝트 것인지 확인할 방법이 없다.
+            // 두 id 모두 앱에 이미 들어 있는 공개 값이라 로그에 남겨도 문제없다.
+            log.warn("소셜 토큰 검증 실패 [{}]: {}", e.getAuthErrorCode(), e.getMessage());
             throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
         }
     }

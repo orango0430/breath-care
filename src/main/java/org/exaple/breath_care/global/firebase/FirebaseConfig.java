@@ -50,7 +50,13 @@ public class FirebaseConfig {
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(in))
                     .build();
-            return FirebaseApp.initializeApp(options);
+            FirebaseApp app = FirebaseApp.initializeApp(options);
+
+            // 어느 프로젝트의 키인지 남긴다. 앱의 google-services.json과 프로젝트가
+            // 다르면 소셜 로그인이 전부 INVALID_SOCIAL_TOKEN으로 떨어지는데, 그때
+            // 로그에 이 줄이 없으면 원인을 좁힐 방법이 없다.
+            log.info("Firebase 프로젝트: {}", app.getOptions().getProjectId());
+            return app;
         }
     }
 

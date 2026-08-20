@@ -11,6 +11,7 @@ import '../models/statistics.dart';
 import '../services/session_service.dart';
 import '../services/auth_service.dart';
 import '../services/push_service.dart';
+import 'home_screen.dart';
 import 'login_screen.dart';
 
 class MyPageScreen extends StatefulWidget {
@@ -132,8 +133,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
     await AuthService.instance.logout(fcmToken: fcmToken);
 
     if (!mounted) return;
+    // Back to the home screen as a guest, not to a login screen. Landing on
+    // login as the only route left the user with nowhere to go but forward —
+    // Back popped the last route and showed a black screen.
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      MaterialPageRoute(builder: (context) => const HomeScreen()),
       (route) => false,
     );
   }
