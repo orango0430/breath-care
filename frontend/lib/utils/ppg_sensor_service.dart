@@ -172,6 +172,9 @@ class PpgSensorService {
   int _contactFrames = 0;
   int _releaseFrames = 0;
 
+  /// Exposure is frozen once, on first contact. See [_lockExposureOnContact].
+  bool _exposureLocked = false;
+
   final List<DateTime> _peakTimestamps = [];
   final List<double> _rrIntervalsMs = [];
   Timer? _simulationTimer;
@@ -313,18 +316,21 @@ class PpgSensorService {
         debugPrint('Flash torch not supported on device: $e');
       }
 
-      // The pulse we are looking for is a fraction of a percent of brightness.
-      // Auto-exposure treats that as something to correct and rides it out,
-      // and autofocus hunts against a lens that has a finger pressed to it —
-      // between them they can erase the signal entirely. Give the torch a
-      // moment to reach full output, then freeze both.
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      // Focus only. Autofocus hunts against a lens with a finger pressed to it
+      // and never settles, and nothing about a covered lens needs refocusing.
+      //
+      // Exposure is *not* frozen here. It used to be, 400ms after the torch
+      // came on — which is before the finger is on the lens. The sensor locked
+      // to a bright, uncovered scene, then the finger blocked the light and
+      // the frames went black and stayed black: 20 seconds of 0.0 uploaded as
+      // a waveform. Auto-exposure flattening the pulse was the worry; killing
+      // the picture outright is worse. It is locked once contact is real, in
+      // [_lockExposureOnContact].
       try {
-        await _cameraController!.setExposureMode(ExposureMode.locked);
         await _cameraController!.setFocusMode(FocusMode.locked);
       } catch (e) {
         // Some devices refuse to lock. Detection still works, it just drifts.
-        debugPrint('Exposure/focus lock unavailable: $e');
+        debugPrint('Focus lock unavailable: $e');
       }
 
       _isCameraAvailable = true;
@@ -356,57 +362,44 @@ class PpgSensorService {
     double vSum = 0;
     int sampleCount = 0;
 
-    if (image.planes.length >= 3) {
-      final yBytes = image.planes[0].bytes;
-      final uBytes = image.planes[1].bytes;
-      final vBytes = image.planes[2].bytes;
+    // Sample a grid of real pixels, addressed by row and column.
+    //
+    // This used to walk the Y plane as a flat byte array — `for (i = 0;
+    // i < bytes.length; i += step)`. That is only correct when a row of
+    // pixels is exactly `width` bytes long, and on most phones it is not:
+    // the camera pads each row out to an alignment boundary, so a large
+    // part of the buffer is padding that reads as zero. Averaging over it
+    // dragged the brightness down toward nothing — the uploaded waveform
+    // came back as 599 samples of `0.0`, which the server correctly called
+    // "관류부족 0.00000". No amount of threshold tuning could have fixed a
+    // signal that was never there.
+    final int width = image.width;
+    final int height = image.height;
+    final yPlane = image.planes[0];
+    final int yRowStride = yPlane.bytesPerRow;
+    final int yPixelStride = yPlane.bytesPerPixel ?? 1;
+    final Uint8List yBytes = yPlane.bytes;
 
-      final int step = math.max(1, yBytes.length ~/ 200);
-      final int uStride = image.planes[1].bytesPerPixel ?? 1;
-      final int vStride = image.planes[2].bytesPerPixel ?? 1;
+    // Roughly 200 points, the same budget as before, but spread over the
+    // frame as a grid rather than along the raw buffer.
+    const int gridSide = 14;
+    final int colStep = math.max(1, width ~/ gridSide);
+    final int rowStep = math.max(1, height ~/ gridSide);
 
-      for (int i = 0; i < yBytes.length; i += step) {
-        final y = yBytes[i].toDouble();
-        final uIdx = math.min((i ~/ 4) * uStride, uBytes.length - 1);
-        final vIdx = math.min((i ~/ 4) * vStride, vBytes.length - 1);
+    for (int row = 0; row < height; row += rowStep) {
+      for (int col = 0; col < width; col += colStep) {
+        final int yIndex = row * yRowStride + col * yPixelStride;
+        if (yIndex >= yBytes.length) continue;
 
-        final u = uBytes[uIdx].toDouble();
-        final v = vBytes[vIdx].toDouble();
-
-        ySum += y;
-        ySqSum += y * y;
-        uSum += u;
-        vSum += v;
-        sampleCount++;
-      }
-    } else if (image.planes.length == 2) {
-      final yBytes = image.planes[0].bytes;
-      final uvBytes = image.planes[1].bytes;
-      final int step = math.max(1, yBytes.length ~/ 200);
-
-      for (int i = 0; i < yBytes.length; i += step) {
-        final y = yBytes[i].toDouble();
-        final uvIdx = math.min(i, uvBytes.length - 2);
-        final u = uvBytes[uvIdx].toDouble();
-        final v = uvBytes[uvIdx + 1].toDouble();
+        final double y = yBytes[yIndex].toDouble();
+        final _Chroma chroma = _chromaAt(image, col, row);
 
         ySum += y;
         ySqSum += y * y;
-        uSum += u;
-        vSum += v;
+        uSum += chroma.u;
+        vSum += chroma.v;
         sampleCount++;
       }
-    } else if (image.planes.isNotEmpty) {
-      final yBytes = image.planes[0].bytes;
-      final step = math.max(1, yBytes.length ~/ 200);
-      for (int i = 0; i < yBytes.length; i += step) {
-        final y = yBytes[i].toDouble();
-        ySum += y;
-        ySqSum += y * y;
-        sampleCount++;
-      }
-      uSum = 128.0 * sampleCount;
-      vSum = 128.0 * sampleCount;
     }
 
     if (sampleCount == 0) return;
@@ -566,7 +559,31 @@ class PpgSensorService {
     }
   }
 
+  /// Freezes exposure a moment after contact is established.
+  ///
+  /// By then the sensor has settled on the covered lens, so the lock holds the
+  /// picture we actually want to measure rather than the room. That stops
+  /// auto-exposure from riding out the pulse, which is a fraction of a percent
+  /// of brightness and looks to the camera like an error to correct.
+  ///
+  /// Failures are ignored: some devices refuse, and drifting exposure is a far
+  /// smaller problem than the black frames that locking too early produced.
+  Future<void> _lockExposureOnContact() async {
+    if (_exposureLocked || _isDisposed || _cameraController == null) return;
+    _exposureLocked = true;
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (_isDisposed || _cameraController == null) return;
+      await _cameraController!.setExposureMode(ExposureMode.locked);
+    } catch (e) {
+      debugPrint('Exposure lock unavailable: $e');
+    }
+  }
+
   void _setFingerDetected(bool detected) {
+    if (detected) {
+      _lockExposureOnContact();
+    }
     // Losing contact ends the run. Whatever comes back is a separate stretch
     // of signal, however quickly the finger returns.
     if (!detected && isFingerDetected) {
@@ -586,6 +603,45 @@ class PpgSensorService {
     if (_current.samples.isEmpty) return;
     _runs.add(_ContactRun());
     _lastSampleAt = null;
+  }
+
+  /// Chroma at a pixel, addressed properly rather than guessed at.
+  ///
+  /// Chroma planes are half resolution in both directions, so the pixel at
+  /// (col, row) reads from (col ~/ 2, row ~/ 2) of the chroma plane — and that
+  /// plane has its own row stride and pixel stride. The old code took
+  /// `bytes[(i ~/ 4) * bytesPerPixel]` off a flat index, which lands on an
+  /// unrelated pixel as soon as either stride is not what it assumed.
+  _Chroma _chromaAt(CameraImage image, int col, int row) {
+    final planes = image.planes;
+    if (planes.length < 2) {
+      return _Chroma.neutral;
+    }
+
+    final int halfCol = col ~/ 2;
+    final int halfRow = row ~/ 2;
+
+    if (planes.length >= 3) {
+      final u = planes[1];
+      final v = planes[2];
+      final int uIndex =
+          halfRow * u.bytesPerRow + halfCol * (u.bytesPerPixel ?? 1);
+      final int vIndex =
+          halfRow * v.bytesPerRow + halfCol * (v.bytesPerPixel ?? 1);
+      if (uIndex >= u.bytes.length || vIndex >= v.bytes.length) {
+        return _Chroma.neutral;
+      }
+      return _Chroma(u.bytes[uIndex].toDouble(), v.bytes[vIndex].toDouble());
+    }
+
+    // Two planes: chroma is interleaved. bytesPerPixel is 2 for those, and the
+    // pair order is V then U on Android's NV21.
+    final uv = planes[1];
+    final int base = halfRow * uv.bytesPerRow + halfCol * (uv.bytesPerPixel ?? 2);
+    if (base + 1 >= uv.bytes.length) {
+      return _Chroma.neutral;
+    }
+    return _Chroma(uv.bytes[base + 1].toDouble(), uv.bytes[base].toDouble());
   }
 
   void _startSimulationFallback() {
@@ -682,6 +738,16 @@ class PpgSensorService {
 /// [millis] is the time the samples actually span, summed frame to frame, so
 /// it is the honest denominator for the frame rate. It is not the difference
 /// between the first and last timestamp — that would include any stall.
+/// The two chroma values at one pixel. 128 each means "no colour information",
+/// which is what a single-plane frame gets.
+class _Chroma {
+  const _Chroma(this.u, this.v);
+  final double u;
+  final double v;
+
+  static const _Chroma neutral = _Chroma(128, 128);
+}
+
 class _ContactRun {
   final List<double> samples = [];
   int millis = 0;
