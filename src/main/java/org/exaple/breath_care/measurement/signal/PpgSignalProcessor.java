@@ -35,6 +35,17 @@ public class PpgSignalProcessor implements SignalProcessor {
     /** 이 시간보다 짧으면 HRV를 신뢰할 수 없다. */
     private static final int MIN_DURATION_SEC = 20;
 
+    /**
+     * 위 시간에서 허용할 부족분.
+     *
+     * <p>앱은 정확히 20초를 재고, fps는 잰 값을 반올림해서 보낸다. 그래서 요구치인
+     * fps×20이 실제 프레임 수보다 몇 장 많아지는 일이 생긴다 — 딱 맞게 잰 측정이
+     * 반올림 한 번 때문에 통째로 거부됐다. 카메라가 프레임을 흘리는 것까지 감안하면
+     * 여유가 필요하고, 이 앞단의 프레임 수 검사가 이미 30% 손실까지 받아 주므로
+     * 여기만 무관용으로 둘 이유가 없다. 박자 수는 MIN_INTERVALS가 따로 지킨다.
+     */
+    private static final double DURATION_TOLERANCE = 0.9;
+
     /** 심박수 하한·상한(bpm). 이 밖은 사람의 안정시 심박으로 보지 않는다. */
     private static final double MIN_BPM = 40.0;
     private static final double MAX_BPM = 200.0;
@@ -68,7 +79,8 @@ public class PpgSignalProcessor implements SignalProcessor {
 
     @Override
     public SignalResult process(double[] samples, int fps) {
-        if (samples == null || samples.length < (long) fps * MIN_DURATION_SEC) {
+        if (samples == null
+                || samples.length < (long) fps * MIN_DURATION_SEC * DURATION_TOLERANCE) {
             return SignalResult.poor();
         }
 

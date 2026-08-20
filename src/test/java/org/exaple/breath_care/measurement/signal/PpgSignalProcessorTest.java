@@ -47,6 +47,11 @@ class PpgSignalProcessorTest {
      * @param sdnnMs  박동 간격에 줄 흔들림의 표준편차. 0이면 완전히 규칙적인 신호다
      */
     private double[] synthesize(double bpm, int seconds, double sdnnMs, long seed) {
+        return synthesize(bpm, seconds, sdnnMs, seed, FPS);
+    }
+
+    /** 프레임률까지 정해서 만든다. 느린 카메라를 흉내 낼 때 쓴다. */
+    private double[] synthesize(double bpm, int seconds, double sdnnMs, long seed, int fps) {
         Random random = new Random(seed);
         double meanRr = 60_000.0 / bpm;
 
@@ -57,9 +62,9 @@ class PpgSignalProcessorTest {
             at += meanRr + random.nextGaussian() * sdnnMs;
         }
 
-        double[] samples = new double[seconds * FPS];
+        double[] samples = new double[seconds * fps];
         for (int i = 0; i < samples.length; i++) {
-            double timeMs = i * 1000.0 / FPS;
+            double timeMs = i * 1000.0 / fps;
             double value = DC;
             for (double beat : beats) {
                 double dt = (timeMs - beat) / PULSE_WIDTH_MS;
@@ -83,6 +88,31 @@ class PpgSignalProcessorTest {
 
         assertThat(result.quality()).isEqualTo(MeasurementQuality.GOOD);
         assertThat(result.hr()).isCloseTo(72.0, within(2.0));
+    }
+
+    @Test
+    @DisplayName("20초를 딱 맞게 잰 측정이 반올림 몇 장 때문에 거부되지 않는다")
+    void acceptsAFullTwentySecondTakeThatIsAFewFramesShort() {
+        // 앱은 20초를 재고 fps는 잰 값을 반올림해서 보낸다. 274장을 20.8초에 걸쳐
+        // 받으면 실제로는 13.2fps인데, 반올림 탓에 14로 올라가는 일이 생긴다.
+        // 그러면 요구치 14×20=280장이 실제 274장보다 많아져, 멀쩡한 측정이 통째로
+        // POOR로 떨어졌다. 실기기에서 "신호 품질이 낮습니다"만 반복된 이유다.
+        int reportedFps = 14;
+        double[] full = synthesize(72, 21, 20, 4, reportedFps);
+        double[] slightlyShort = java.util.Arrays.copyOf(full, reportedFps * 20 - 6);
+
+        SignalResult result = processor.process(slightlyShort, reportedFps);
+
+        assertThat(result.isUsable())
+                .as("20초짜리 측정이 몇 장 모자란다고 버려지면 안 된다")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("정말 짧은 측정은 여전히 거부한다")
+    void stillRejectsAGenuinelyShortTake() {
+        // 여유를 준 것이지 문을 연 것이 아니다. 10초짜리는 HRV를 믿을 수 없다.
+        assertThat(processor.process(synthesize(72, 10, 20, 5), FPS).isUsable()).isFalse();
     }
 
     @Test

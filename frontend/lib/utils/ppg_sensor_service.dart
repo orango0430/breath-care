@@ -206,10 +206,20 @@ class PpgSensorService {
   /// and slows down in dim light. Sending a nominal 30 when the real rate was
   /// 22 would stretch every interval the server computes and skew the heart
   /// rate by the same ratio.
+  /// Divides by the elapsed milliseconds, not by [capturedDurationSec].
+  ///
+  /// That getter floors to whole seconds, and dividing by a floored figure
+  /// reports a rate higher than the camera actually managed — 274 frames over
+  /// 20.8s came out as 14 fps instead of 13.2. Two things broke. The server
+  /// asks for `fps × 20` samples before it will look at a reading, and an
+  /// inflated fps put that bar above the number of frames we actually had, so
+  /// a perfectly good 20-second measurement came back "신호 품질이 낮습니다".
+  /// The same inflation also stretched every interval, skewing the heart rate
+  /// by whatever the rounding error happened to be.
   int get capturedFps {
-    final seconds = capturedDurationSec;
-    if (seconds <= 0 || _waveform.isEmpty) return 30;
-    return (_waveform.length / seconds).round().clamp(10, 240);
+    if (_capturedMillis <= 0 || _waveform.isEmpty) return 30;
+    final rate = _waveform.length * 1000 / _capturedMillis;
+    return rate.round().clamp(10, 240);
   }
 
   bool get isCameraAvailable => _isCameraAvailable;
