@@ -9,6 +9,7 @@ import 'condition_measurement_screen.dart';
 import 'recommended_breathing_screen.dart';
 import 'my_page_screen.dart';
 import '../models/measurement.dart';
+import '../utils/schedule_storage_service.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
 import '../services/calendar_service.dart';
@@ -28,15 +29,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   /// The most recent reading, or null when this account has never measured.
-  ///
-  /// Null is a real state the screen has to draw, not something to paper over.
-  /// These fields used to start at 78 / 88 bpm / 24 ms, so a brand new user was
-  /// shown a full condition score before they had ever put a finger on the
-  /// lens — on a health screen that is indistinguishable from a real reading.
   Measurement? _latest;
 
-  /// Placeholder for a metric with nothing behind it.
-  static const String _noData = '–';
+  /// Sample figures shown before this account has measured anything.
+  ///
+  /// **These are not measurements.** They are here because the demo needs the
+  /// cards to look populated, and they are only ever visible while [_latest] is
+  /// null — one real reading replaces them for good. Anything that decides
+  /// something (the AI report, the weekly statistics) reads the server, never
+  /// these.
+  static const int _sampleScore = 78;
+  static const int _sampleHr = 88;
+  static const int _sampleHrv = 24;
 
   // Selected bottom navigation index (0: Home, 1: Log, 2: Breath)
   int _selectedNavIndex = 0;
@@ -54,7 +58,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Today's schedules, from the server — the same rows the reminders are
   /// scheduled from, so what the user sees is what will actually notify them.
   Future<void> _loadHomeSchedules() async {
-    if (!ApiClient.instance.isLoggedIn) return;
+    // Signed out, or the server has nothing for today: fall back to the sample
+    // schedules so the section is not empty in a demo. A real schedule always
+    // wins — this only fills a gap.
+    if (!ApiClient.instance.isLoggedIn) {
+      await _loadSampleSchedules();
+      return;
+    }
 
     final now = DateTime.now();
     final dayStart = DateTime(now.year, now.month, now.day);
@@ -65,6 +75,10 @@ class _HomeScreenState extends State<HomeScreen> {
         to: dayStart.add(const Duration(days: 1)),
       );
       if (!mounted) return;
+      if (events.isEmpty) {
+        await _loadSampleSchedules();
+        return;
+      }
       setState(() {
         _homeSchedules = events
             .map((e) => {
@@ -76,8 +90,14 @@ class _HomeScreenState extends State<HomeScreen> {
             .toList();
       });
     } on ApiException {
-      // The empty-state copy already covers this.
+      await _loadSampleSchedules();
     }
+  }
+
+  Future<void> _loadSampleSchedules() async {
+    final sample = await ScheduleStorageService.loadSchedules();
+    if (!mounted) return;
+    setState(() => _homeSchedules = sample);
   }
 
   Future<void> _loadLatestMeasurement() async {
@@ -345,7 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    displayScore?.toString() ?? _noData,
+                    '${displayScore ?? _sampleScore}',
                     style: GoogleFonts.outfit(
                       fontSize: 46,
                       fontWeight: FontWeight.w400,
@@ -468,7 +488,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      displayBpm?.toString() ?? _noData,
+                      '${displayBpm ?? _sampleHr}',
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 34,
@@ -545,7 +565,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      displayHrv?.toString() ?? _noData,
+                      '${displayHrv ?? _sampleHrv}',
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 34,

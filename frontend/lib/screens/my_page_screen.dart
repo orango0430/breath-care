@@ -27,9 +27,13 @@ class _MyPageScreenState extends State<MyPageScreen> {
   StatisticsSummary? _summary;
   List<DailyMetric> _daily = [];
 
-  /// Shown where there is no number to show. The three cards used to read
-  /// 5회 / 326분 / 7일 on every account, including one created a minute ago.
-  static const String _noData = '–';
+  /// Sample figures for the three cards, shown until the account has data.
+  ///
+  /// **Not measurements.** They keep the cards from reading empty in a demo,
+  /// and any real activity replaces them.
+  static const String _sampleCount = '5';
+  static const String _sampleMinutes = '326';
+  static const String _sampleStreak = '7';
 
   @override
   void initState() {
@@ -64,24 +68,26 @@ class _MyPageScreenState extends State<MyPageScreen> {
   ///
   /// Counts completed ones only. An open session means the user breathed but
   /// never took the closing measurement, so there is no record of what it did.
-  String get _weeklyCount => _summary == null
-      ? _noData
-      : _sessions.where((s) => s.isCompleted).length.toString();
+  String get _weeklyCount {
+    final done = _sessions.where((s) => s.isCompleted).length;
+    if (_summary == null || done == 0) return _sampleCount;
+    return done.toString();
+  }
 
   /// Total minutes spent breathing this week.
   String get _totalMinutes {
-    if (_summary == null) return _noData;
     final total = _sessions
         .map((s) => s.duration)
         .whereType<Duration>()
         .fold(Duration.zero, (a, b) => a + b);
+    if (_summary == null || total.inMinutes == 0) return _sampleMinutes;
     return total.inMinutes.toString();
   }
 
   /// Days in a row with at least one reading, counting back from the most
   /// recent day in the window.
   String get _streak {
-    if (_daily.isEmpty) return _noData;
+    if (_daily.isEmpty) return _sampleStreak;
     var streak = 0;
     for (final day in _daily.reversed) {
       if (!day.hasData) {
@@ -92,7 +98,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       }
       streak++;
     }
-    return streak.toString();
+    return streak == 0 ? _sampleStreak : streak.toString();
   }
 
   Future<void> _onProfileTapped() async {

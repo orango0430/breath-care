@@ -37,23 +37,50 @@ class _LogScreenState extends State<LogScreen> {
   /// One entry per day of the week, including days with no reading.
   List<DailyMetric> _daily = [];
 
-  /// A placeholder that reads as "no reading yet" instead of a plausible
-  /// number. This screen used to fall back to 82 bpm and a 78 score, which on
-  /// a health app is indistinguishable from a real measurement.
-  static const String _noData = '–';
+  /// Sample figures used until the week has readings in it.
+  ///
+  /// **Not measurements.** They fill the cards and charts for a demo, and the
+  /// first real reading of the week replaces every one of them. The AI report
+  /// below never sees these — it reads the server, so it will say "기록이 매우
+  /// 적었습니다" even while these are on screen.
+  static const String _sampleAvgHr = '82';
+  static const String _sampleMaxHr = '94';
+  static const String _sampleMinHr = '68';
+  static const String _sampleAvgHrv = '22';
+  static const String _sampleMaxHrv = '32';
+  static const String _sampleMinHrv = '16';
+  static const int _sampleScore = 78;
 
-  String _metric(double? value) => value == null ? _noData : value.round().toString();
+  /// One sample week per chart, in 월~일 order.
+  static const List<int?> _sampleHrWeek = [50, 60, 65, 60, 72, 85, 74];
+  static const List<int?> _sampleHrvWeek = [22, 26, 32, 24, 19, 29, null];
 
-  String get _avgHrStr => _metric(_summary?.hr.avg);
-  String get _maxHrStr => _metric(_summary?.hr.max);
-  String get _minHrStr => _metric(_summary?.hr.min);
+  String _metric(double? value, String sample) =>
+      value == null ? sample : value.round().toString();
 
-  String get _avgHrvStr => _metric(_summary?.hrv.avg);
-  String get _maxHrvStr => _metric(_summary?.hrv.max);
-  String get _minHrvStr => _metric(_summary?.hrv.min);
+  String get _avgHrStr => _metric(_summary?.hr.avg, _sampleAvgHr);
+  String get _maxHrStr => _metric(_summary?.hr.max, _sampleMaxHr);
+  String get _minHrStr => _metric(_summary?.hr.min, _sampleMinHr);
 
-  /// Null when nothing has been measured this week.
-  int? get _weeklyAvgConditionScore => _summary?.conditionScore.avg?.round();
+  String get _avgHrvStr => _metric(_summary?.hrv.avg, _sampleAvgHrv);
+  String get _maxHrvStr => _metric(_summary?.hrv.max, _sampleMaxHrv);
+  String get _minHrvStr => _metric(_summary?.hrv.min, _sampleMinHrv);
+
+  /// Falls back to the sample score when nothing has been measured this week.
+  int get _weeklyAvgConditionScore =>
+      _summary?.conditionScore.avg?.round() ?? _sampleScore;
+
+  /// Daily heart rates, or the sample week when nothing was measured.
+  List<int?> get _hrWeek {
+    final week = _daily.map((d) => d.hr?.round()).toList();
+    return week.any((v) => v != null) ? week : _sampleHrWeek;
+  }
+
+  /// Daily HRV, same fallback.
+  List<int?> get _hrvWeek {
+    final week = _daily.map((d) => d.hrv?.round()).toList();
+    return week.any((v) => v != null) ? week : _sampleHrvWeek;
+  }
 
   // Selected sub-tab: 0: 일정관리, 1: 기록, 2: 분석결과
   int _selectedSubTab = 0;
@@ -1194,7 +1221,7 @@ class _LogScreenState extends State<LogScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    _weeklyAvgConditionScore?.toString() ?? _noData,
+                    '$_weeklyAvgConditionScore',
                     style: GoogleFonts.outfit(
                       fontSize: 42,
                       fontWeight: FontWeight.w400,
@@ -1545,7 +1572,7 @@ class _LogScreenState extends State<LogScreen> {
                   painter: _HrLineChartPainter(
                     // Nulls are days without a reading, and the painter skips
                     // them rather than drawing a line through zero.
-                    hrList: _daily.map((d) => d.hr?.round()).toList(),
+                    hrList: _hrWeek,
                   ),
                 ),
               ),
@@ -1668,17 +1695,18 @@ class _LogScreenState extends State<LogScreen> {
   /// 7 Vertical Rounded Bars Chart for HRV (월~일 matching 레퍼런스 이미지)
   Widget _buildHrvBarChart() {
     // Days with no reading draw as an empty stub. There used to be a sample
-    // week here — 22, 26, 32… — which rendered a full chart for someone who
-    // had never measured anything.
+    // week here — 22, 26, 32… — and it is back, but only as a fallback: the
+    // moment the week has one real reading, [_hrvWeek] returns that instead.
     final dayNames = ['월', '화', '수', '목', '금', '토', '일'];
-    final Map<int, int?> dailyAvgs = {for (var w = 1; w <= 7; w++) w: null};
+    final week = _hrvWeek;
+    final Map<int, int?> dailyAvgs = {
+      for (var w = 1; w <= 7; w++) w: w <= week.length ? week[w - 1] : null
+    };
     int? highestVal;
     int? lowestVal;
 
-    for (final day in _daily) {
-      final hrv = day.hrv?.round();
+    for (final hrv in dailyAvgs.values) {
       if (hrv == null) continue;
-      dailyAvgs[day.date.weekday] = hrv;
       if (highestVal == null || hrv > highestVal) highestVal = hrv;
       if (lowestVal == null || hrv < lowestVal) lowestVal = hrv;
     }
