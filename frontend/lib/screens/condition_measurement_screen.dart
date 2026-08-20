@@ -9,6 +9,7 @@ import '../utils/responsive.dart';
 import '../utils/ppg_sensor_service.dart';
 import '../utils/breathing_routine_model.dart';
 import '../services/api_client.dart';
+import '../services/api_exception.dart';
 import '../services/measurement_service.dart';
 import 'measurement_result_screen.dart';
 
@@ -340,14 +341,17 @@ class _ConditionMeasurementScreenState
         conditionScore: measurement.conditionScore,
         quality: measurement.quality.name.toUpperCase(),
       ));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // 백엔드 서버가 보낸 구체적인 메시지 표시 (예: "측정 신호가 불안정해요. 다시 측정해 주세요.")
+      _showServerErrorDialog(e.message);
     } catch (e) {
       if (!mounted) return;
-      // 서버 연결 필수: 서버 연동 실패 시 결과 화면으로 진입하지 않고 에러 안내 후 측정 재시도 유도
-      _showServerConnectionErrorDialog();
+      _showServerErrorDialog('백엔드 서버와 통신할 수 없습니다.\n서버 상태 및 네트워크 연결을 확인한 후 다시 시도해 주세요.');
     }
   }
 
-  void _showServerConnectionErrorDialog() {
+  void _showServerErrorDialog(String message) {
     setState(() {
       _status = MeasurementStatus.waiting;
       _secondsLeft = 20;
@@ -362,7 +366,7 @@ class _ConditionMeasurementScreenState
         backgroundColor: AppColors.darkCharcoal,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
-          '서버 연결 실패',
+          '측정 안내',
           style: TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 18,
@@ -370,9 +374,9 @@ class _ConditionMeasurementScreenState
             color: AppColors.white,
           ),
         ),
-        content: const Text(
-          '백엔드 서버와 통신할 수 없습니다.\n서버 상태 및 네트워크 연결을 확인한 후 다시 시도해 주세요.',
-          style: TextStyle(
+        content: Text(
+          message,
+          style: const TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 14,
             fontWeight: FontWeight.w400,
