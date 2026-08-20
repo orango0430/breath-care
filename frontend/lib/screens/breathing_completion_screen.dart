@@ -4,7 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
+import '../models/measurement.dart';
+import '../models/session.dart';
+import '../services/api_exception.dart';
+import '../services/session_service.dart';
 import 'breathing_exercise_screen.dart';
+import 'condition_measurement_screen.dart';
 
 /// Breathing Completion Screen (Ritual Feedback - 스크롤 가능한 호흡 종료 피드백 화면)
 class BreathingCompletionScreen extends StatefulWidget {
@@ -12,6 +17,12 @@ class BreathingCompletionScreen extends StatefulWidget {
   final String bgImagePath;
   final String durationString;
   final int cycleCount;
+
+  /// The session opened when the breathing started, if there was one. Given
+  /// it, this screen can close the session with a second measurement and show
+  /// the before/after. Null when the user came from the catalogue rather than
+  /// from a reading, or when they are not signed in.
+  final int? sessionId;
 
   // `hrvChange` used to live here, defaulting to '-8 bpm'. Nothing measured it
   // — the exercise screen passed a constant — and nothing displayed it either.
@@ -23,6 +34,7 @@ class BreathingCompletionScreen extends StatefulWidget {
     this.bgImagePath = 'assets/images/bg_breath_478.png',
     this.durationString = '05:04',
     this.cycleCount = 1,
+    this.sessionId,
   });
 
   @override
@@ -32,7 +44,12 @@ class BreathingCompletionScreen extends StatefulWidget {
 
 class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
   bool _isSaved = false;
+  bool _isSaving = false;
   bool _isBookmarked = false;
+
+  /// Filled in once the session is closed, so the screen can show what the
+  /// breathing actually did instead of a fixed line.
+  MetricChange? _change;
 
   @override
   void initState() {
@@ -63,23 +80,112 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
     }
   }
 
-  /// Marks the session done on this screen only.
+  /// Closes the session, taking the second measurement first.
   ///
-  /// It used to say "성공적으로 저장되었습니다", but nothing was written
-  /// anywhere — the record vanished the moment the screen closed. The server
-  /// does have `/api/sessions`, but it brackets a session between two
-  /// measurements and this flow never takes the second one, so there is
-  /// nothing honest to send yet. Until that exists, the copy says what
-  /// actually happened.
-  void _onSaveRecord() {
-    setState(() {
-      _isSaved = true;
-    });
+  /// The server needs a reading at each end — that pair is what makes the
+  /// record worth keeping, since the whole claim of the app is that the
+  /// breathing changed something. So this sends the user back to the
+  /// measurement screen and only then writes the session.
+  ///
+  /// Without a session (catalogue entry, or signed out) there is nothing to
+  /// store, and the button just acknowledges the run.
+  Future<void> _onSaveRecord() async {
+    if (_isSaving || _isSaved) return;
+
+    final sessionId = widget.sessionId;
+    if (sessionId == null) {
+      setState(() => _isSaved = true);
+      _toast('이번 Ritual을 마쳤어요.');
+      return;
+    }
+
+    final measurement = await Navigator.of(context).push<Measurement>(
+      MaterialPageRoute(
+        builder: (context) =>
+            const ConditionMeasurementScreen(returnsMeasurement: true),
+      ),
+    );
+    // Backed out of measuring. The session stays open, which is accurate —
+    // they did breathe, we just do not know what it did for them.
+    if (measurement == null || !mounted) return;
+
+    setState(() => _isSaving = true);
+    try {
+      final session = await SessionService.instance.complete(
+        sessionId: sessionId,
+        postMeasurementId: measurement.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isSaved = true;
+        _isSaving = false;
+        _change = session.change;
+      });
+      _toast(_changeSummary(session.change));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      _toast(e.message, isError: true);
+    }
+  }
+
+  /// Says what actually moved, rather than a generic success line.
+  String _changeSummary(MetricChange? change) {
+    final hr = change?.hr;
+    if (hr == null) return 'Ritual 기록을 저장했어요.';
+    if (hr < 0) return '심박수가 ${hr.abs().round()} bpm 내려갔어요.';
+    if (hr > 0) return '심박수가 ${hr.round()} bpm 올라갔어요.';
+    return '심박수는 그대로예요.';
+  }
+
+  /// Names what the button will actually do. "저장" would overpromise when
+  /// there is no session behind it, and hide the measurement step when there
+  /// is one.
+  String get _saveButtonLabel {
+    if (_isSaved) return 'Ritual 완료';
+    if (_isSaving) return '저장하는 중...';
+    return widget.sessionId == null ? 'Ritual 마치기' : '다시 측정하고 기록 저장';
+  }
+
+  /// The closing note. Quotes real numbers once the session is recorded, and
+  /// stays general until then.
+  ///
+  /// The old text asserted "시작 전 컨디션이 78점으로 이미 안정적인 편이었는데"
+  /// to every user regardless of what they had measured.
+  String get _feedbackText {
+    final base = '${widget.title}은 긴장을 천천히 가라앉히는 데 효과적인 리듬으로 알려져 있어요.';
+    final change = _change;
+    if (change == null) {
+      return '$base 이번 Ritual로 그 흐름을 한 번 더 다듬은 셈이에요.';
+    }
+
+    final parts = <String>[];
+    final hr = change.hr;
+    if (hr != null && hr.abs() >= 1) {
+      parts.add(hr < 0
+          ? '심박수가 ${hr.abs().round()} bpm 내려갔고'
+          : '심박수가 ${hr.round()} bpm 올라갔고');
+    }
+    final hrv = change.hrv;
+    if (hrv != null && hrv.abs() >= 1) {
+      parts.add(hrv > 0
+          ? 'HRV가 ${hrv.round()} ms 올라갔어요'
+          : 'HRV가 ${hrv.abs().round()} ms 내려갔어요');
+    }
+
+    if (parts.isEmpty) {
+      return '$base 이번에는 수치가 크게 움직이지 않았어요. 컨디션에 따라 달라질 수 있어요.';
+    }
+    return '$base 이번 Ritual 전후로 ${parts.join(', ')}.';
+  }
+
+  void _toast(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('이번 Ritual을 마쳤어요.'),
-        backgroundColor: AppColors.lightMint,
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppColors.coralRed : AppColors.lightMint,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -607,9 +713,7 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
 
           // Body Analysis Text matching 1st screenshot (밑줄 제거, 단일 톤)
           Text(
-            // No score here: the sentence used to claim "시작 전 컨디션이
-            // 78점" to everyone, whatever they had actually measured.
-            '${widget.title}은 긴장을 천천히 가라앉히는 데 효과적인 리듬으로 알려져 있어요. 이번 Ritual로 그 흐름을 한 번 더 다듬은 셈이에요.',
+            _feedbackText,
             style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 13.5,
@@ -658,7 +762,7 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
                       const SizedBox(width: 6),
                     ],
                     Text(
-                      _isSaved ? 'Ritual 완료' : 'Ritual 마치기',
+                      _saveButtonLabel,
                       style: TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 16,

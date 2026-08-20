@@ -60,6 +60,9 @@ class ApiClient {
   Future<dynamic> put(String path, {Object? body, Duration? timeout}) =>
       _send('PUT', path, body: body, timeout: timeout);
 
+  Future<dynamic> patch(String path, {Object? body, Duration? timeout}) =>
+      _send('PATCH', path, body: body, timeout: timeout);
+
   Future<dynamic> delete(String path, {Object? body, Duration? timeout}) =>
       _send('DELETE', path, body: body, timeout: timeout);
 

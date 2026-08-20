@@ -6,7 +6,9 @@ import '../utils/responsive.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
 import '../services/statistics_service.dart';
+import '../models/session.dart';
 import '../models/statistics.dart';
+import '../services/session_service.dart';
 import '../services/auth_service.dart';
 import '../services/push_service.dart';
 import 'login_screen.dart';
@@ -34,24 +36,46 @@ class _MyPageScreenState extends State<MyPageScreen> {
     _loadStatistics();
   }
 
+  List<BreathingSession> _sessions = [];
+
   Future<void> _loadStatistics() async {
     if (!_isLoggedIn) return;
+
+    final weekStart = DateTime.now().subtract(const Duration(days: 6));
     try {
       final summary = await StatisticsService.instance.summary();
       final daily = await StatisticsService.instance.daily();
+      final sessions = await SessionService.instance.history(
+        from: DateTime(weekStart.year, weekStart.month, weekStart.day),
+      );
       if (!mounted) return;
       setState(() {
         _summary = summary;
         _daily = daily;
+        _sessions = sessions;
       });
     } on ApiException {
       // Cards stay on the placeholder.
     }
   }
 
-  /// Measurements taken this week.
-  String get _weeklyCount =>
-      _summary == null ? _noData : _summary!.measurementCount.toString();
+  /// Breathing sessions finished this week.
+  ///
+  /// Counts completed ones only. An open session means the user breathed but
+  /// never took the closing measurement, so there is no record of what it did.
+  String get _weeklyCount => _summary == null
+      ? _noData
+      : _sessions.where((s) => s.isCompleted).length.toString();
+
+  /// Total minutes spent breathing this week.
+  String get _totalMinutes {
+    if (_summary == null) return _noData;
+    final total = _sessions
+        .map((s) => s.duration)
+        .whereType<Duration>()
+        .fold(Duration.zero, (a, b) => a + b);
+    return total.inMinutes.toString();
+  }
 
   /// Days in a row with at least one reading, counting back from the most
   /// recent day in the window.
@@ -342,12 +366,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
-                              const Text(
-                                // Nothing measures this yet: breathing
-                                // sessions are never recorded on the server,
-                                // so there is no duration to total up.
-                                _noData,
-                                style: TextStyle(
+                              Text(
+                                _totalMinutes,
+                                style: const TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 34,
                                   fontWeight: FontWeight.w400,

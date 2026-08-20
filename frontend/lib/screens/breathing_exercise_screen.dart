@@ -6,6 +6,10 @@ import 'package:audioplayers/audioplayers.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
+import '../models/session.dart';
+import '../services/api_client.dart';
+import '../services/api_exception.dart';
+import '../services/session_service.dart';
 import '../utils/breathing_routine_model.dart';
 import 'breathing_completion_screen.dart';
 
@@ -25,9 +29,16 @@ class BreathingExerciseScreen extends StatefulWidget {
   final double? targetHold2Sec;
   final bool isAdaptiveRamp;
 
+  /// The reading that led the user here. Given one, the exercise opens a
+  /// breathing session on the server so the before/after can be recorded.
+  /// Null when the user picked a technique from the catalogue instead of from
+  /// a measurement, or when they are not signed in.
+  final int? preMeasurementId;
+
   const BreathingExerciseScreen({
     super.key,
     required this.title,
+    this.preMeasurementId,
     this.totalCycles = 20,
     this.targetDurationMinutes = 3,
     this.routineModel,
@@ -56,6 +67,31 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   int elapsedSeconds = 0;
   int currentCycle = 1;
   bool isPlaying = true;
+
+  /// The session opened for this run, once the server has accepted it.
+  int? _sessionId;
+
+  /// Opens the session as the breathing starts, so the recorded duration is
+  /// the real one rather than however long the completion screen sat open.
+  ///
+  /// Failures are silent: the point of this screen is to breathe along with
+  /// it, and an error banner over the pacing animation would be worse than a
+  /// missing record.
+  Future<void> _openSession() async {
+    final preId = widget.preMeasurementId;
+    if (preId == null || !ApiClient.instance.isLoggedIn) return;
+
+    try {
+      final session = await SessionService.instance.start(
+        preMeasurementId: preId,
+        preset: BreathingPreset.fromTitle(widget.title),
+      );
+      if (!mounted) return;
+      _sessionId = session.id;
+    } on ApiException catch (e) {
+      debugPrint('Session start skipped: ${e.code}');
+    }
+  }
 
   // Audio Player & Mute State
   AudioPlayer? _audioPlayer;
@@ -132,6 +168,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
 
     _startTimer();
     _initAudioPlayer();
+    _openSession();
 
     // 3초간 유지 후 1초간 부드럽게 스르륵 투명해져 사라지는 Fade-Out 팝업 오버레이
     if (widget.isAdaptiveRamp) {
@@ -251,6 +288,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
           bgImagePath: widget.bgImagePath,
           durationString: _formattedTime,
           cycleCount: currentCycle,
+          sessionId: _sessionId,
         ),
       ),
     );

@@ -51,6 +51,14 @@ public class CalendarEvent {
     @Column(nullable = false)
     private Instant startAt;
 
+    /**
+     * 사용자가 완료 처리한 시각. null이면 아직 안 끝난 일정이다.
+     *
+     * <p>boolean이 아니라 시각인 이유: "언제 끝냈는지"를 알면 나중에 통계에 쓸 수 있고,
+     * 지금도 시각 없이 참/거짓만 남기는 것보다 잃는 게 없다.
+     */
+    private Instant completedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private EventSource source;
@@ -85,6 +93,15 @@ public class CalendarEvent {
      */
     public static CalendarEvent fromPhone(Long userId, String title, Instant startAt, String externalId) {
         return new CalendarEvent(userId, title, null, null, startAt, EventSource.PHONE, externalId);
+    }
+
+    /** 완료 처리를 켜고 끈다. 되돌릴 수 있어야 해서 해제도 같은 메서드로 받는다. */
+    public void markCompleted(boolean completed) {
+        this.completedAt = completed ? Instant.now() : null;
+    }
+
+    public boolean isCompleted() {
+        return completedAt != null;
     }
 
     public void update(String title, EventType eventType, String customCategory, Instant startAt) {

@@ -20,12 +20,18 @@ class MeasurementResultScreen extends StatefulWidget {
   final String? scheduleTitle;
   final String? scheduleTime;
 
+  /// The stored reading this screen is showing. Needed to open a breathing
+  /// session against it. Null for a guest — their readings are not saved, so
+  /// there is nothing for a session to point at.
+  final int? measurementId;
+
   const MeasurementResultScreen({
     super.key,
     required this.result,
     required this.routine,
     this.scheduleTitle,
     this.scheduleTime,
+    this.measurementId,
   });
 
   @override
@@ -109,6 +115,7 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
                                 builder: (context) => BreathingExerciseScreen(
                                   title: activeRoutine.title,
                                   routineModel: activeRoutine,
+                                  preMeasurementId: widget.measurementId,
                                   initialInhaleSec: activeResult.measuredInhaleSec,
                                   initialExhaleSec: activeResult.measuredExhaleSec,
                                   isAdaptiveRamp: true, // 측정 결과 화면에서 진입 시 내 측정 호흡에서 60초간 점진 유도 (Ramp)!

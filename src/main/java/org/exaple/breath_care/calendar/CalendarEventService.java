@@ -39,6 +39,14 @@ public class CalendarEventService {
         return CalendarEventResponse.from(event);
     }
 
+    /** 일정 완료 체크. 해제도 같은 엔드포인트로 받는다. */
+    @Transactional
+    public CalendarEventResponse setCompleted(Long userId, Long eventId, boolean completed) {
+        CalendarEvent event = findOwned(userId, eventId);
+        event.markCompleted(completed);
+        return CalendarEventResponse.from(event);
+    }
+
     @Transactional
     public void delete(Long userId, Long eventId) {
         calendarEventRepository.delete(findOwned(userId, eventId));

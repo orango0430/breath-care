@@ -2,6 +2,7 @@ package org.exaple.breath_care.calendar;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.exaple.breath_care.calendar.dto.CalendarEventCompleteRequest;
 import org.exaple.breath_care.calendar.dto.CalendarEventRequest;
 import org.exaple.breath_care.calendar.dto.CalendarEventResponse;
 import org.exaple.breath_care.global.response.ApiResponse;
@@ -11,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -58,6 +60,16 @@ public class CalendarEventController {
             @Valid @RequestBody CalendarEventRequest request) {
 
         return ApiResponse.ok(calendarEventService.update(userId, eventId, request));
+    }
+
+    /** 일정 완료 체크·해제. */
+    @PatchMapping("/{eventId}/complete")
+    public ApiResponse<CalendarEventResponse> setCompleted(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long eventId,
+            @Valid @RequestBody CalendarEventCompleteRequest request) {
+
+        return ApiResponse.ok(calendarEventService.setCompleted(userId, eventId, request.completed()));
     }
 
     @DeleteMapping("/{eventId}")

@@ -22,6 +22,8 @@ public record CalendarEventResponse(
         String customCategory,
         String displayCategory,
         Instant startAt,
+        boolean completed,
+        Instant completedAt,
         EventSource source,
         Instant createdAt
 ) {
@@ -33,6 +35,8 @@ public record CalendarEventResponse(
                 event.getCustomCategory(),
                 event.displayCategory(),
                 event.getStartAt(),
+                event.isCompleted(),
+                event.getCompletedAt(),
                 event.getSource(),
                 event.getCreatedAt());
     }

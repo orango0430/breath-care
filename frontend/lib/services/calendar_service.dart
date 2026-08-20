@@ -43,6 +43,7 @@ class CalendarEvent {
     required this.title,
     required this.eventType,
     required this.startAt,
+    this.completed = false,
     this.customCategory,
     this.displayCategory,
   });
@@ -51,6 +52,11 @@ class CalendarEvent {
   final String title;
   final EventType eventType;
   final DateTime startAt;
+
+  /// Whether the user ticked this schedule off. Held on the server so the tick
+  /// survives a reinstall and shows up on their other device.
+  final bool completed;
+
   final String? customCategory;
 
   /// What to show as the category. The server resolves it, so prefer this over
@@ -62,6 +68,7 @@ class CalendarEvent {
         title: json['title'] as String,
         eventType: EventType.parse(json['eventType'] as String?),
         startAt: DateTime.parse(json['startAt'] as String).toLocal(),
+        completed: json['completed'] as bool? ?? false,
         customCategory: json['customCategory'] as String?,
         displayCategory: json['displayCategory'] as String?,
       );
@@ -117,6 +124,18 @@ class CalendarService {
         'customCategory': customCategory.trim(),
       'startAt': startAt.toUtc().toIso8601String(),
     });
+    return CalendarEvent.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Ticks a schedule off, or clears the tick.
+  ///
+  /// Takes the state you want rather than toggling: a retried request would
+  /// otherwise undo itself, which is exactly what a flaky network produces.
+  Future<CalendarEvent> setCompleted(int eventId, bool completed) async {
+    final data = await _client.patch(
+      '/api/calendar/events/$eventId/complete',
+      body: {'completed': completed},
+    );
     return CalendarEvent.fromJson(data as Map<String, dynamic>);
   }
 

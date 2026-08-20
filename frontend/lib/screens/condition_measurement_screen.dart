@@ -8,6 +8,7 @@ import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
 import '../utils/ppg_sensor_service.dart';
 import '../utils/breathing_routine_model.dart';
+import '../models/measurement.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
 import '../services/measurement_service.dart';
@@ -20,9 +21,15 @@ enum MeasurementStatus { waiting, measuring, analyzing, completed }
 class ConditionMeasurementScreen extends StatefulWidget {
   final String? scheduleTitle;
 
+  /// When true the screen pops with the stored `Measurement` instead of moving
+  /// on to the result screen. Used for the second reading of a breathing
+  /// session, where the caller needs the id and is already showing results.
+  final bool returnsMeasurement;
+
   const ConditionMeasurementScreen({
     super.key,
     this.scheduleTitle,
+    this.returnsMeasurement = false,
   });
 
   @override
@@ -52,6 +59,10 @@ class _ConditionMeasurementScreenState
   // PpgSensorService & 3 Breathing Routines Mapping
   final PpgSensorService _ppgService = PpgSensorService();
   PpgMeasurementResult? _lastResult;
+
+  /// The stored reading behind [_lastResult]. Null for a guest, whose readings
+  /// are analysed without being saved and so carry no id.
+  Measurement? _serverMeasurement;
   BreathingRoutineModel? _recommendedRoutine;
   bool _isFingerCovered = true;
 
@@ -112,6 +123,7 @@ class _ConditionMeasurementScreenState
             result: res,
             routine: routine,
             scheduleTitle: widget.scheduleTitle,
+            measurementId: _serverMeasurement?.id,
           ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
@@ -297,6 +309,19 @@ class _ConditionMeasurementScreenState
               .analyzeAsGuest(samples: waveform, fps: fps, durationSec: durationSec);
 
       if (!mounted) return;
+
+      // Kept so the caller can bracket a breathing session with it. Only a
+      // stored measurement has an id — a guest reading is analysed and thrown
+      // away, so there is nothing to reference later.
+      _serverMeasurement = ApiClient.instance.isLoggedIn ? measurement : null;
+
+      // The screen was opened to collect the closing reading of a session, so
+      // hand it straight back instead of starting the whole result flow again.
+      if (widget.returnsMeasurement) {
+        Navigator.of(context).pop(_serverMeasurement);
+        return;
+      }
+
       _applyResult(PpgMeasurementResult.fromServer(
         hr: measurement.hr ?? 0,
         hrv: measurement.hrv ?? 0,

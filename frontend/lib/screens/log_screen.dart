@@ -131,9 +131,34 @@ class _LogScreenState extends State<LogScreen> {
         'category': event.displayCategory ?? event.eventType.label,
         'date': DateTime(event.startAt.year, event.startAt.month, event.startAt.day),
         'time': _formatTime(event.startAt),
-        // The server has no notion of "done" yet, so nothing is ever ticked.
-        'isCompleted': false,
+        'isCompleted': event.completed,
       };
+
+  /// Ticks a schedule off. The state is written server side, so it survives a
+  /// reinstall and shows on the user's other devices.
+  Future<void> _setCompleted(int eventId, bool completed) async {
+    // Move the tick straight away — waiting on the round trip makes the
+    // checkbox feel broken on a slow connection.
+    setState(() {
+      for (final row in _schedules) {
+        if (row['id'] == eventId) row['isCompleted'] = completed;
+      }
+    });
+
+    try {
+      await CalendarService.instance.setCompleted(eventId, completed);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        for (final row in _schedules) {
+          if (row['id'] == eventId) row['isCompleted'] = !completed;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.coralRed),
+      );
+    }
+  }
 
   static String _formatTime(DateTime at) {
     final period = at.hour < 12 ? '오전' : '오후';
@@ -780,16 +805,43 @@ class _LogScreenState extends State<LogScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
+            // Tick a schedule off once it is over. Kept separate from
+            // "준비하기": preparing is doing the breathing, completing is the
+            // event itself being done, and either can happen without the other.
+            GestureDetector(
+              onTap: () {
+                final id = schedule['id'];
+                if (id is int) _setCompleted(id, !isCompleted);
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 14),
+                child: Icon(
+                  isCompleted
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: isCompleted
+                      ? AppColors.lightMint
+                      : const Color(0xFF555860),
+                  size: 24,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 15,
                     fontWeight: FontWeight.w400,
-                    color: Colors.white,
+                    color: isCompleted ? const Color(0xFF8B8F98) : Colors.white,
+                    decoration:
+                        isCompleted ? TextDecoration.lineThrough : null,
+                    decorationColor: const Color(0xFF8B8F98),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -813,6 +865,7 @@ class _LogScreenState extends State<LogScreen> {
                   ],
                 ),
               ],
+            ),
             ),
 
             ElevatedButton(
