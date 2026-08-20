@@ -150,42 +150,46 @@ class _AddScheduleModalState extends State<AddScheduleModal> {
       return;
     }
 
-    final scheduleData = {
-      'title': title,
-      'category': _categories[_selectedCategoryIndex],
-      'date': _selectedDate,
-      'time': _formattedTimeString,
-      'isCompleted': widget.initialSchedule?['isCompleted'] ?? false,
-    };
-
-    if (widget.initialSchedule != null && widget.onScheduleUpdated != null) {
-      widget.onScheduleUpdated!(scheduleData);
-    } else if (widget.onScheduleAdded != null) {
-      widget.onScheduleAdded!(scheduleData);
-    }
-
     final category = _categories[_selectedCategoryIndex];
     final mapped = EventType.fromCategory(category);
+    final existingId = widget.initialSchedule?['id'];
 
     setState(() => _isSaving = true);
     try {
-      final saved = await CalendarService.instance.create(
-        title: title,
-        eventType: mapped.type,
-        startAt: _startAt,
-        customCategory: mapped.custom,
-      );
+      // Editing and creating both go to the server. The callback fires only
+      // once the server has answered, with the row the server actually stored
+      // — reporting the save before it happens would leave a schedule on
+      // screen that no reminder will ever fire for.
+      final saved = existingId is int
+          ? await CalendarService.instance.update(
+              eventId: existingId,
+              title: title,
+              eventType: mapped.type,
+              startAt: _startAt,
+              customCategory: mapped.custom,
+            )
+          : await CalendarService.instance.create(
+              title: title,
+              eventType: mapped.type,
+              startAt: _startAt,
+              customCategory: mapped.custom,
+            );
 
       if (!mounted) return;
-      widget.onScheduleAdded?.call({
+      final row = {
         'id': saved.id,
         'title': saved.title,
         // Prefer the server's label: it resolves custom categories for us.
         'category': saved.displayCategory ?? category,
         'date': DateTime(saved.startAt.year, saved.startAt.month, saved.startAt.day),
         'time': _formatTime(TimeOfDay.fromDateTime(saved.startAt)),
-        'isCompleted': false,
-      });
+        'isCompleted': widget.initialSchedule?['isCompleted'] ?? false,
+      };
+      if (existingId is int) {
+        widget.onScheduleUpdated?.call(row);
+      } else {
+        widget.onScheduleAdded?.call(row);
+      }
       Navigator.of(context).pop();
     } on ApiException catch (e) {
       if (!mounted) return;

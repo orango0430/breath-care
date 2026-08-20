@@ -56,7 +56,6 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   int elapsedSeconds = 0;
   int currentCycle = 1;
   bool isPlaying = true;
-  int averageHrvBpmChange = -8;
 
   // Audio Player & Mute State
   AudioPlayer? _audioPlayer;
@@ -252,7 +251,6 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
           bgImagePath: widget.bgImagePath,
           durationString: _formattedTime,
           cycleCount: currentCycle,
-          hrvChange: '$averageHrvBpmChange bpm',
         ),
       ),
     );

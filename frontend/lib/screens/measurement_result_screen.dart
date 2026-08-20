@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
@@ -9,13 +8,24 @@ import 'breathing_exercise_screen.dart';
 import 'log_screen.dart';
 
 class MeasurementResultScreen extends StatefulWidget {
-  final PpgMeasurementResult? result;
-  final BreathingRoutineModel? routine;
+  /// Both are required. They used to be optional with a sample reading behind
+  /// them, which meant a bug anywhere upstream surfaced as a plausible-looking
+  /// heart rate instead of an error.
+  final PpgMeasurementResult result;
+  final BreathingRoutineModel routine;
+
+  /// The schedule this reading was taken for, when the user came in from one.
+  /// Null on a measurement started from the home screen — the card is hidden
+  /// rather than showing a stand-in event.
+  final String? scheduleTitle;
+  final String? scheduleTime;
 
   const MeasurementResultScreen({
     super.key,
-    this.result,
-    this.routine,
+    required this.result,
+    required this.routine,
+    this.scheduleTitle,
+    this.scheduleTime,
   });
 
   @override
@@ -24,46 +34,19 @@ class MeasurementResultScreen extends StatefulWidget {
 }
 
 class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _saveToPrefs();
-  }
-
-  Future<void> _saveToPrefs() async {
-    final activeResult = widget.result ?? PpgMeasurementResult.defaultSample();
-    final score =
-        (activeResult.hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('latest_condition_score', score);
-    await prefs.setInt('latest_bpm', activeResult.bpm);
-    await prefs.setInt('latest_hrv', activeResult.hrvSdnnMs.round());
-
-    final history = prefs.getStringList('condition_score_history') ?? ['57', '81', '92', '84'];
-    history.add(score.toString());
-    await prefs.setStringList('condition_score_history', history);
-
-    final hrHistory = prefs.getStringList('hr_history') ?? [];
-    hrHistory.add(activeResult.bpm.toString());
-    await prefs.setStringList('hr_history', hrHistory);
-
-    final hrvHistory = prefs.getStringList('hrv_history_v2') ?? [];
-    final weekday = DateTime.now().weekday; // 1 = Mon, 7 = Sun
-    final hrvVal = activeResult.hrvSdnnMs.round();
-    hrvHistory.add('$weekday:$hrvVal');
-    await prefs.setStringList('hrv_history_v2', hrvHistory);
-  }
+  // Readings are not cached locally any more. The server stores every
+  // measurement as it is submitted, and the home and log screens read it back
+  // from there — keeping a second copy in SharedPreferences meant two answers
+  // that drifted apart, and it seeded a fake week (57, 81, 92, 84) to boot.
 
   @override
   Widget build(BuildContext context) {
-    final activeResult = widget.result ?? PpgMeasurementResult.defaultSample();
-    final activeRoutine = widget.routine ??
-        BreathingRoutineModel.fromMeasurement(
-          bpm: activeResult.bpm,
-          hrvSdnn: activeResult.hrvSdnnMs,
-        );
-    final conditionScore =
-        (activeResult.hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
+    final activeResult = widget.result;
+    final activeRoutine = widget.routine;
+    // The server's own score when it came from a reading. `conditionScore`
+    // prefers it and only falls back to the local formula for the web
+    // simulation, so the two answers can no longer disagree here.
+    final conditionScore = activeResult.conditionScore;
 
     return Scaffold(
       backgroundColor: AppColors.darkBg,
@@ -178,8 +161,12 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
     );
   }
 
-  /// 1. AAC Event Schedule Card
+  /// 1. The schedule this reading belongs to, if any.
   Widget _buildScheduleCard() {
+    final title = widget.scheduleTitle;
+    // Was a fixed "AAC 해커톤 면접 일정 · 오후 2:30" on every result screen.
+    if (title == null || title.trim().isEmpty) return const SizedBox.shrink();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
@@ -190,37 +177,43 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
           width: 0.8,
         ),
       ),
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'AAC 해커톤 면접 일정',
-            style: TextStyle(
-              fontFamily: AppFonts.pretendard,
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: AppColors.white,
+          Expanded(
+            child: Text(
+              title,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: AppFonts.pretendard,
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: AppColors.white,
+              ),
             ),
           ),
-          Row(
-            children: [
-              Icon(
-                Icons.access_time_rounded,
-                color: AppColors.lightGray,
-                size: 14,
-              ),
-              SizedBox(width: 4),
-              Text(
-                '오후 2:30',
-                style: TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
+          if (widget.scheduleTime != null) ...[
+            const SizedBox(width: 12),
+            Row(
+              children: [
+                const Icon(
+                  Icons.access_time_rounded,
                   color: AppColors.lightGray,
+                  size: 14,
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 4),
+                Text(
+                  widget.scheduleTime!,
+                  style: const TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.lightGray,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

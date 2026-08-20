@@ -10,8 +10,11 @@ import 'log_screen.dart';
 import 'condition_measurement_screen.dart';
 import 'recommended_breathing_screen.dart';
 import 'my_page_screen.dart';
-import '../utils/ppg_sensor_service.dart';
-import '../utils/schedule_storage_service.dart';
+import '../models/measurement.dart';
+import '../services/api_client.dart';
+import '../services/api_exception.dart';
+import '../services/calendar_service.dart';
+import '../services/measurement_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
@@ -26,10 +29,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Dynamic state variables for measurement data
-  int conditionScore = 78;
-  int heartRate = 88;
-  int hrvValue = 24;
+  /// The most recent reading, or null when this account has never measured.
+  ///
+  /// Null is a real state the screen has to draw, not something to paper over.
+  /// These fields used to start at 78 / 88 bpm / 24 ms, so a brand new user was
+  /// shown a full condition score before they had ever put a finger on the
+  /// lens — on a health screen that is indistinguishable from a real reading.
+  Measurement? _latest;
+
+  /// Placeholder for a metric with nothing behind it.
+  static const String _noData = '–';
 
   // Selected bottom navigation index (0: Home, 1: Log, 2: Breath)
   int _selectedNavIndex = 0;
@@ -40,39 +49,56 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _selectedNavIndex = widget.initialIndex;
-    _loadSavedMeasurementData();
+    _loadLatestMeasurement();
     _loadHomeSchedules();
   }
 
+  /// Today's schedules, from the server — the same rows the reminders are
+  /// scheduled from, so what the user sees is what will actually notify them.
   Future<void> _loadHomeSchedules() async {
-    final loaded = await ScheduleStorageService.loadSchedules();
-    if (mounted) {
+    if (!ApiClient.instance.isLoggedIn) return;
+
+    final now = DateTime.now();
+    final dayStart = DateTime(now.year, now.month, now.day);
+
+    try {
+      final events = await CalendarService.instance.events(
+        from: dayStart,
+        to: dayStart.add(const Duration(days: 1)),
+      );
+      if (!mounted) return;
       setState(() {
-        _homeSchedules = loaded;
+        _homeSchedules = events
+            .map((e) => {
+                  'id': e.id,
+                  'title': e.title,
+                  'time': _formatTime(e.startAt),
+                  'isCompleted': false,
+                })
+            .toList();
       });
+    } on ApiException {
+      // The empty-state copy already covers this.
     }
   }
 
-  Future<void> _loadSavedMeasurementData() async {
-    final latestRes = PpgSensorService.latestResult;
-    final prefs = await SharedPreferences.getInstance();
-    final savedScore = prefs.getInt('latest_condition_score');
-    final savedBpm = prefs.getInt('latest_bpm');
-    final savedHrv = prefs.getInt('latest_hrv');
+  Future<void> _loadLatestMeasurement() async {
+    if (!ApiClient.instance.isLoggedIn) return;
 
-    if (mounted) {
-      setState(() {
-        if (latestRes != null) {
-          conditionScore = latestRes.conditionScore;
-          heartRate = latestRes.bpm;
-          hrvValue = latestRes.hrvSdnnMs.round();
-        } else if (savedScore != null) {
-          conditionScore = savedScore;
-          if (savedBpm != null) heartRate = savedBpm;
-          if (savedHrv != null) hrvValue = savedHrv;
-        }
-      });
+    try {
+      // History comes back newest first, so the head is the latest reading.
+      final history = await MeasurementService.instance.history();
+      if (!mounted || history.isEmpty) return;
+      setState(() => _latest = history.first);
+    } on ApiException {
+      // Leave the placeholders in place.
     }
+  }
+
+  static String _formatTime(DateTime at) {
+    final period = at.hour < 12 ? '오전' : '오후';
+    final hour = at.hour == 0 ? 12 : (at.hour > 12 ? at.hour - 12 : at.hour);
+    return '$period $hour:${at.minute.toString().padLeft(2, '0')}';
   }
 
   // Format today's date dynamically (e.g., 2026년 8월 11일)
@@ -316,10 +342,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 3. Today's Condition Index Card
   Widget _buildConditionIndexCard() {
-    final latestRes = PpgSensorService.latestResult;
-    final displayScore = latestRes != null
-        ? (latestRes.hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round()
-        : conditionScore;
+    // The server owns this number. Recomputing it here from HRV produced a
+    // second, slightly different answer to the one stored against the reading.
+    final displayScore = _latest?.conditionScore?.round();
 
     return Container(
       width: double.infinity,
@@ -351,7 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    '$displayScore',
+                    displayScore?.toString() ?? _noData,
                     style: GoogleFonts.outfit(
                       fontSize: 46,
                       fontWeight: FontWeight.w400,
@@ -419,9 +444,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 4. HR & HRV Metric Cards Row (Matching Screenshot 100%)
   Widget _buildMetricCardsRow() {
-    final latestRes = PpgSensorService.latestResult;
-    final displayBpm = latestRes?.bpm ?? heartRate;
-    final displayHrv = latestRes != null ? latestRes.hrvSdnnMs.round() : hrvValue;
+    final displayBpm = _latest?.hr?.round();
+    final displayHrv = _latest?.hrv?.round();
 
     return Row(
       children: [
@@ -475,7 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      '$displayBpm',
+                      displayBpm?.toString() ?? _noData,
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 34,
@@ -552,7 +576,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      '$displayHrv',
+                      displayHrv?.toString() ?? _noData,
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 34,

@@ -11,7 +11,6 @@ import '../utils/breathing_routine_model.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
 import '../services/measurement_service.dart';
-import '../utils/schedule_storage_service.dart';
 import 'measurement_result_screen.dart';
 
 /// `analyzing` covers the round trip to the server: the take is finished but
@@ -94,15 +93,15 @@ class _ConditionMeasurementScreenState
     } else if (_status == MeasurementStatus.measuring) {
       // Do not force completion on tap during measurement while waiting for finger
     } else if (_status == MeasurementStatus.completed) {
-      final res = _lastResult ?? PpgMeasurementResult.randomSample();
+      // Never invent one. This used to fall back to `randomSample()`, which
+      // would have shown a made-up heart rate as if it had been measured.
+      final res = _lastResult;
+      if (res == null) return;
       final routine = _recommendedRoutine ??
           BreathingRoutineModel.fromMeasurement(
             bpm: res.bpm,
             hrvSdnn: res.hrvSdnnMs,
           );
-
-      // Complete schedule in storage
-      await ScheduleStorageService.completeSchedule(widget.scheduleTitle ?? '');
 
       // Navigate to MeasurementResultScreen (측정 결과 화면) with result & routine
       if (!mounted) return;
@@ -112,6 +111,7 @@ class _ConditionMeasurementScreenState
               MeasurementResultScreen(
             result: res,
             routine: routine,
+            scheduleTitle: widget.scheduleTitle,
           ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);

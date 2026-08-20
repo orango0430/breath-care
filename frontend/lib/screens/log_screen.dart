@@ -4,7 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
 import '../services/calendar_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/statistics_service.dart';
+import '../models/statistics.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
@@ -13,7 +14,6 @@ import 'home_screen.dart';
 import 'condition_measurement_screen.dart';
 import 'my_page_screen.dart';
 import 'add_schedule_modal.dart';
-import '../utils/schedule_storage_service.dart';
 
 class LogScreen extends StatefulWidget {
   final int initialSubTab;
@@ -28,53 +28,32 @@ class LogScreen extends StatefulWidget {
 }
 
 class _LogScreenState extends State<LogScreen> {
-  // Recorded condition scores history for weekly average calculation
-  List<int> _recordedConditionScores = [57, 81, 90, 84];
+  /// This week's aggregates, straight from the server. Null until the request
+  /// finishes, and it stays null when it fails — the screen shows a dash in
+  /// that case rather than a number nobody measured.
+  StatisticsSummary? _summary;
 
-  // Recorded HR History for dynamic HR Analysis
-  List<int> _recordedHrHistory = [];
+  /// One entry per day of the week, including days with no reading.
+  List<DailyMetric> _daily = [];
 
-  // Recorded HRV History: Map<int, List<int>> mapping weekday (1=Mon..7=Sun) to list of HRV values (ms)
-  Map<int, List<int>> _weekdayHrvMap = {};
-  List<int> _allHrvValues = [];
+  /// A placeholder that reads as "no reading yet" instead of a plausible
+  /// number. This screen used to fall back to 82 bpm and a 78 score, which on
+  /// a health app is indistinguishable from a real measurement.
+  static const String _noData = '–';
 
-  String get _avgHrStr {
-    if (_recordedHrHistory.isEmpty) return '82';
-    final sum = _recordedHrHistory.reduce((a, b) => a + b);
-    return (sum / _recordedHrHistory.length).round().toString();
-  }
+  String _metric(double? value) => value == null ? _noData : value.round().toString();
 
-  String get _maxHrStr {
-    if (_recordedHrHistory.isEmpty) return '94';
-    return _recordedHrHistory.reduce(math.max).toString();
-  }
+  String get _avgHrStr => _metric(_summary?.hr.avg);
+  String get _maxHrStr => _metric(_summary?.hr.max);
+  String get _minHrStr => _metric(_summary?.hr.min);
 
-  String get _minHrStr {
-    if (_recordedHrHistory.isEmpty) return '68';
-    return _recordedHrHistory.reduce(math.min).toString();
-  }
+  String get _avgHrvStr => _metric(_summary?.hrv.avg);
+  String get _maxHrvStr => _metric(_summary?.hrv.max);
+  String get _minHrvStr => _metric(_summary?.hrv.min);
 
-  String get _avgHrvStr {
-    if (_allHrvValues.isEmpty) return '22';
-    final sum = _allHrvValues.reduce((a, b) => a + b);
-    return (sum / _allHrvValues.length).round().toString();
-  }
+  /// Null when nothing has been measured this week.
+  int? get _weeklyAvgConditionScore => _summary?.conditionScore.avg?.round();
 
-  String get _maxHrvStr {
-    if (_allHrvValues.isEmpty) return '32';
-    return _allHrvValues.reduce(math.max).toString();
-  }
-
-  String get _minHrvStr {
-    if (_allHrvValues.isEmpty) return '16';
-    return _allHrvValues.reduce(math.min).toString();
-  }
-
-  int get _weeklyAvgConditionScore {
-    if (_recordedConditionScores.isEmpty) return 78;
-    final sum = _recordedConditionScores.reduce((a, b) => a + b);
-    return (sum / _recordedConditionScores.length).round();
-  }
   // Selected sub-tab: 0: 일정관리, 1: 기록, 2: 분석결과
   int _selectedSubTab = 0;
 
@@ -109,8 +88,10 @@ class _LogScreenState extends State<LogScreen> {
     super.initState();
     final now = DateTime.now();
     _selectedSubTab = widget.initialSubTab;
-    _selectedDate = _today;
+    _selectedDate = DateTime(now.year, now.month, now.day);
+    _currentDisplayMonth = DateTime(now.year, now.month, 1);
     _loadSchedules();
+    _loadStatistics();
   }
 
   /// Fetches the displayed month. The server treats `to` as exclusive, so the
@@ -158,69 +139,28 @@ class _LogScreenState extends State<LogScreen> {
     final period = at.hour < 12 ? '오전' : '오후';
     final hour = at.hour == 0 ? 12 : (at.hour > 12 ? at.hour - 12 : at.hour);
     return '$period $hour:${at.minute.toString().padLeft(2, '0')}';
-=======
-    _selectedDate = DateTime(now.year, now.month, now.day);
-    _currentDisplayMonth = DateTime(now.year, now.month, 1);
-
-    _loadSchedules();
-    _loadConditionScores();
   }
 
-  Future<void> _loadSchedules() async {
-    final loaded = await ScheduleStorageService.loadSchedules();
-    if (mounted) {
+  /// Loads this week's numbers for the 기록 and 분석결과 tabs.
+  ///
+  /// The server aggregates rather than the app, so the weekly average matches
+  /// whatever the reports say. Failures are swallowed on purpose: the screen
+  /// already renders dashes, and a red banner over a chart the user did not
+  /// ask to refresh is noise.
+  Future<void> _loadStatistics() async {
+    if (!ApiClient.instance.isLoggedIn) return;
+
+    try {
+      final summary = await StatisticsService.instance.summary();
+      final daily = await StatisticsService.instance.daily();
+      if (!mounted) return;
       setState(() {
-        _schedules.clear();
-        _schedules.addAll(loaded);
+        _summary = summary;
+        _daily = daily;
       });
+    } on ApiException {
+      // Leave the dashes in place.
     }
-  }
-
-  Future<void> _loadConditionScores() async {
-    final prefs = await SharedPreferences.getInstance();
-    final history = prefs.getStringList('condition_score_history');
-    if (history != null && history.isNotEmpty) {
-      final loaded = history.map((e) => int.tryParse(e) ?? 78).toList();
-      if (mounted) {
-        setState(() {
-          _recordedConditionScores = loaded;
-        });
-      }
-    }
-
-    final hrList = prefs.getStringList('hr_history');
-    if (hrList != null && hrList.isNotEmpty) {
-      final loadedHr = hrList.map((e) => int.tryParse(e) ?? 75).toList();
-      if (mounted) {
-        setState(() {
-          _recordedHrHistory = loadedHr;
-        });
-      }
-    }
-
-    final hrvList = prefs.getStringList('hrv_history_v2');
-    if (hrvList != null && hrvList.isNotEmpty) {
-      final Map<int, List<int>> map = {};
-      final List<int> allVals = [];
-      for (final entry in hrvList) {
-        final parts = entry.split(':');
-        if (parts.length == 2) {
-          final w = int.tryParse(parts[0]);
-          final v = int.tryParse(parts[1]);
-          if (w != null && v != null) {
-            map.putIfAbsent(w, () => []).add(v);
-            allVals.add(v);
-          }
-        }
-      }
-      if (mounted) {
-        setState(() {
-          _weekdayHrvMap = map;
-          _allHrvValues = allVals;
-        });
-      }
-    }
->>>>>>> cc8162f (feat: 하드코딩 데이터 실기능 연동 및 UI 스타일 정돈)
   }
 
   void _onBottomNavTap(int index) {
@@ -466,10 +406,6 @@ class _LogScreenState extends State<LogScreen> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
               GestureDetector(
                 onTap: () {
                   setState(() {
@@ -486,25 +422,22 @@ class _LogScreenState extends State<LogScreen> {
                     letterSpacing: 0.3,
                   ),
                 ),
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _currentDisplayMonth = DateTime(
-                        _currentDisplayMonth.year,
-                        _currentDisplayMonth.month + 1,
-                        1,
-                      );
-                    });
-                    _loadSchedules();
-                  },
-                  icon: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF90939A),
-                    size: 22,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    _currentDisplayMonth = DateTime(
+                      _currentDisplayMonth.year,
+                      _currentDisplayMonth.month + 1,
+                      1,
+                    );
+                  });
+                  _loadSchedules();
+                },
+                icon: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF90939A),
+                  size: 22,
                 ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -713,18 +646,17 @@ class _LogScreenState extends State<LogScreen> {
                 AddScheduleModal.show(
                   context,
                   initialDate: _selectedDate,
-                  onScheduleAdded: (newSchedule) async {
-                    await ScheduleStorageService.addSchedule(newSchedule);
+                  onScheduleAdded: (newSchedule) {
+                    // The modal already saved it. Jump to the day it landed on
+                    // so the user sees what they just created, then refetch.
                     setState(() {
-                      _schedules.add(newSchedule);
-                      if (newSchedule['date'] != null) {
-                        final newDate = newSchedule['date'] as DateTime;
+                      final newDate = newSchedule['date'] as DateTime?;
+                      if (newDate != null) {
                         _selectedDate = newDate;
                         _currentDisplayMonth = DateTime(newDate.year, newDate.month, 1);
                       }
                     });
                     _loadSchedules();
-                  },
                   },
                 );
               },
@@ -996,11 +928,8 @@ class _LogScreenState extends State<LogScreen> {
                   AddScheduleModal.show(
                     context,
                     initialSchedule: schedule,
-                    onScheduleUpdated: (updatedSchedule) async {
-                      await ScheduleStorageService.updateSchedule(
-                        schedule['id'] ?? schedule['title'],
-                        updatedSchedule,
-                      );
+                    onScheduleUpdated: (updatedSchedule) {
+                      // Saved by the modal already; just refetch the month.
                       _loadSchedules();
                       if (mounted) {
                         ScaffoldMessenger.of(this.context).showSnackBar(
@@ -1085,18 +1014,31 @@ class _LogScreenState extends State<LogScreen> {
             ),
             TextButton(
               onPressed: () async {
-                await ScheduleStorageService.deleteSchedule(schedule['id'] ?? schedule['title']);
-                _loadSchedules();
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('일정이 삭제되었습니다.'),
-                      duration: Duration(seconds: 2),
-                      backgroundColor: AppColors.coralRed,
-                    ),
-                  );
+                final messenger = ScaffoldMessenger.of(context);
+                final navigator = Navigator.of(context);
+                final id = schedule['id'];
+                if (id is! int) return;
+
+                try {
+                  await CalendarService.instance.delete(id);
+                } on ApiException catch (e) {
+                  navigator.pop();
+                  messenger.showSnackBar(SnackBar(
+                    content: Text(e.message),
+                    backgroundColor: AppColors.coralRed,
+                  ));
+                  return;
                 }
+
+                _loadSchedules();
+                navigator.pop();
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('일정이 삭제되었습니다.'),
+                    duration: Duration(seconds: 2),
+                    backgroundColor: AppColors.coralRed,
+                  ),
+                );
               },
               child: const Text('삭제', style: TextStyle(color: AppColors.coralRed, fontWeight: FontWeight.w400)),
             ),
@@ -1151,7 +1093,7 @@ class _LogScreenState extends State<LogScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    '$_weeklyAvgConditionScore',
+                    _weeklyAvgConditionScore?.toString() ?? _noData,
                     style: GoogleFonts.outfit(
                       fontSize: 42,
                       fontWeight: FontWeight.w400,
@@ -1499,7 +1441,11 @@ class _LogScreenState extends State<LogScreen> {
                 height: 200,
                 width: double.infinity,
                 child: CustomPaint(
-                  painter: _HrLineChartPainter(hrList: _recordedHrHistory),
+                  painter: _HrLineChartPainter(
+                    // Nulls are days without a reading, and the painter skips
+                    // them rather than drawing a line through zero.
+                    hrList: _daily.map((d) => d.hr?.round()).toList(),
+                  ),
                 ),
               ),
             ],
@@ -1620,39 +1566,23 @@ class _LogScreenState extends State<LogScreen> {
 
   /// 7 Vertical Rounded Bars Chart for HRV (월~일 matching 레퍼런스 이미지)
   Widget _buildHrvBarChart() {
-    List<Map<String, dynamic>> hrvData;
+    // Days with no reading draw as an empty stub. There used to be a sample
+    // week here — 22, 26, 32… — which rendered a full chart for someone who
+    // had never measured anything.
+    final dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+    final Map<int, int?> dailyAvgs = {for (var w = 1; w <= 7; w++) w: null};
+    int? highestVal;
+    int? lowestVal;
 
-    if (_allHrvValues.isEmpty) {
-      // Default sample baseline matching reference design
-      hrvData = [
-        {'day': '월', 'val': 22, 'height': 50.0, 'color': const Color(0xFF454850), 'textColor': const Color(0xFF80848E)},
-        {'day': '화', 'val': 26, 'height': 80.0, 'color': const Color(0xFF4D5058), 'textColor': const Color(0xFF80848E)},
-        {'day': '수', 'val': 32, 'height': 120.0, 'color': const Color(0xFFE4FBCB), 'textColor': const Color(0xFFE4FBCB), 'hasDot': true},
-        {'day': '목', 'val': 24, 'height': 72.0, 'color': const Color(0xFF474A52), 'textColor': const Color(0xFF80848E)},
-        {'day': '금', 'val': 19, 'height': 55.0, 'color': const Color(0xFFF9F6AF), 'textColor': const Color(0xFFF9F6AF), 'hasDot': true},
-        {'day': '토', 'val': 29, 'height': 105.0, 'color': const Color(0xFF555861), 'textColor': const Color(0xFF80848E)},
-        {'day': '일', 'val': null, 'height': 8.0, 'color': const Color(0xFF38393F), 'textColor': const Color(0xFF6E727C)},
-      ];
-    } else {
-      // Dynamic calculation based on _weekdayHrvMap
-      final dayNames = ['월', '화', '수', '목', '금', '토', '일'];
-      final Map<int, int?> dailyAvgs = {};
-      int? highestVal;
-      int? lowestVal;
+    for (final day in _daily) {
+      final hrv = day.hrv?.round();
+      if (hrv == null) continue;
+      dailyAvgs[day.date.weekday] = hrv;
+      if (highestVal == null || hrv > highestVal) highestVal = hrv;
+      if (lowestVal == null || hrv < lowestVal) lowestVal = hrv;
+    }
 
-      for (int w = 1; w <= 7; w++) {
-        final list = _weekdayHrvMap[w];
-        if (list != null && list.isNotEmpty) {
-          final avg = (list.reduce((a, b) => a + b) / list.length).round();
-          dailyAvgs[w] = avg;
-          if (highestVal == null || avg > highestVal) highestVal = avg;
-          if (lowestVal == null || avg < lowestVal) lowestVal = avg;
-        } else {
-          dailyAvgs[w] = null;
-        }
-      }
-
-      hrvData = List.generate(7, (i) {
+    final hrvData = List.generate(7, (i) {
         final w = i + 1; // 1 = Mon, 7 = Sun
         final val = dailyAvgs[w];
         if (val == null) {
@@ -1690,7 +1620,6 @@ class _LogScreenState extends State<LogScreen> {
           'hasDot': isHighest || isLowest,
         };
       });
-    }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -2073,7 +2002,8 @@ class _LogScreenState extends State<LogScreen> {
 
 /// CustomPainter for "이번 주 HR 추이" Line Chart
 class _HrLineChartPainter extends CustomPainter {
-  final List<int> hrList;
+  /// One slot per day of the week; null where nothing was measured.
+  final List<int?> hrList;
 
   _HrLineChartPainter({this.hrList = const []});
 
@@ -2138,18 +2068,16 @@ class _HrLineChartPainter extends CustomPainter {
       textPainter.paint(canvas, Offset(x - textPainter.width / 2, h - 14));
     }
 
-    // Dynamic HR Data Mapping
-    final List<int> activeData = hrList.isNotEmpty
-        ? hrList
-        : [50, 60, 65, 60, 72, 85, 74];
-
-    final double stepX = activeData.length > 1
-        ? chartW / (activeData.length - 1)
-        : chartW;
+    // Only the days that actually have a reading get a point. There was a
+    // fallback week here — 50, 60, 65… — that drew a full trend line for an
+    // account with no measurements at all.
+    final double stepX =
+        hrList.length > 1 ? chartW / (hrList.length - 1) : chartW;
 
     final List<Offset> points = [];
-    for (int i = 0; i < activeData.length; i++) {
-      final val = activeData[i];
+    for (int i = 0; i < hrList.length; i++) {
+      final val = hrList[i];
+      if (val == null) continue;
       // Normalize val between 20 and 120 (0.0 to 1.0)
       final norm = ((val - 20) / (120 - 20)).clamp(0.0, 1.0);
       final y = (h - 24) - norm * (h - 24 - 15);
@@ -2210,7 +2138,9 @@ class _HrLineChartPainter extends CustomPainter {
 
       // Point Dot & Badge Tooltip on Last Highlight Point
       final lastPoint = points.last;
-      final latestValue = activeData.last;
+      // The most recent day that actually has a reading, not the last slot —
+      // the week's later days are usually still empty.
+      final latestValue = hrList.lastWhere((v) => v != null, orElse: () => null);
 
       canvas.drawCircle(
         lastPoint,

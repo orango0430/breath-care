@@ -4,6 +4,9 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
 import '../services/api_client.dart';
+import '../services/api_exception.dart';
+import '../services/statistics_service.dart';
+import '../models/statistics.dart';
 import '../services/auth_service.dart';
 import '../services/push_service.dart';
 import 'login_screen.dart';
@@ -17,6 +20,55 @@ class MyPageScreen extends StatefulWidget {
 
 class _MyPageScreenState extends State<MyPageScreen> {
   bool get _isLoggedIn => ApiClient.instance.isLoggedIn;
+
+  StatisticsSummary? _summary;
+  List<DailyMetric> _daily = [];
+
+  /// Shown where there is no number to show. The three cards used to read
+  /// 5회 / 326분 / 7일 on every account, including one created a minute ago.
+  static const String _noData = '–';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatistics();
+  }
+
+  Future<void> _loadStatistics() async {
+    if (!_isLoggedIn) return;
+    try {
+      final summary = await StatisticsService.instance.summary();
+      final daily = await StatisticsService.instance.daily();
+      if (!mounted) return;
+      setState(() {
+        _summary = summary;
+        _daily = daily;
+      });
+    } on ApiException {
+      // Cards stay on the placeholder.
+    }
+  }
+
+  /// Measurements taken this week.
+  String get _weeklyCount =>
+      _summary == null ? _noData : _summary!.measurementCount.toString();
+
+  /// Days in a row with at least one reading, counting back from the most
+  /// recent day in the window.
+  String get _streak {
+    if (_daily.isEmpty) return _noData;
+    var streak = 0;
+    for (final day in _daily.reversed) {
+      if (!day.hasData) {
+        // Today not being measured yet should not zero out a run that is
+        // otherwise intact, so skip a trailing empty day before counting.
+        if (streak == 0) continue;
+        break;
+      }
+      streak++;
+    }
+    return streak.toString();
+  }
 
   Future<void> _onProfileTapped() async {
     if (!_isLoggedIn) {
@@ -227,9 +279,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            const Text(
-                              '5',
-                              style: TextStyle(
+                            Text(
+                              _weeklyCount,
+                              style: const TextStyle(
                                 fontFamily: AppFonts.pretendard,
                                 fontSize: 38,
                                 fontWeight: FontWeight.w400,
@@ -291,7 +343,10 @@ class _MyPageScreenState extends State<MyPageScreen> {
                             textBaseline: TextBaseline.alphabetic,
                             children: [
                               const Text(
-                                '326',
+                                // Nothing measures this yet: breathing
+                                // sessions are never recorded on the server,
+                                // so there is no duration to total up.
+                                _noData,
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 34,
@@ -349,9 +404,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
-                              const Text(
-                                '7',
-                                style: TextStyle(
+                              Text(
+                                _streak,
+                                style: const TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 34,
                                   fontWeight: FontWeight.w400,

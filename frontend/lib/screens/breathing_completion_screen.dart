@@ -12,7 +12,10 @@ class BreathingCompletionScreen extends StatefulWidget {
   final String bgImagePath;
   final String durationString;
   final int cycleCount;
-  final String hrvChange;
+
+  // `hrvChange` used to live here, defaulting to '-8 bpm'. Nothing measured it
+  // — the exercise screen passed a constant — and nothing displayed it either.
+  // A real before/after needs a second measurement once the session ends.
 
   const BreathingCompletionScreen({
     super.key,
@@ -20,7 +23,6 @@ class BreathingCompletionScreen extends StatefulWidget {
     this.bgImagePath = 'assets/images/bg_breath_478.png',
     this.durationString = '05:04',
     this.cycleCount = 1,
-    this.hrvChange = '-8 bpm',
   });
 
   @override
@@ -61,13 +63,21 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
     }
   }
 
+  /// Marks the session done on this screen only.
+  ///
+  /// It used to say "성공적으로 저장되었습니다", but nothing was written
+  /// anywhere — the record vanished the moment the screen closed. The server
+  /// does have `/api/sessions`, but it brackets a session between two
+  /// measurements and this flow never takes the second one, so there is
+  /// nothing honest to send yet. Until that exists, the copy says what
+  /// actually happened.
   void _onSaveRecord() {
     setState(() {
       _isSaved = true;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Ritual 기록이 성공적으로 저장되었습니다!'),
+        content: Text('이번 Ritual을 마쳤어요.'),
         backgroundColor: AppColors.lightMint,
         duration: Duration(seconds: 2),
       ),
@@ -597,7 +607,9 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
 
           // Body Analysis Text matching 1st screenshot (밑줄 제거, 단일 톤)
           Text(
-            '${widget.title}은 긴장을 천천히 가라앉히는 데 효과적인 리듬으로 알려져 있어요. 시작 전 컨디션이 78점으로 이미 안정적인 편이었는데, 이번 Ritual로 그 흐름을 한 번 더 다듬은 셈이에요.',
+            // No score here: the sentence used to claim "시작 전 컨디션이
+            // 78점" to everyone, whatever they had actually measured.
+            '${widget.title}은 긴장을 천천히 가라앉히는 데 효과적인 리듬으로 알려져 있어요. 이번 Ritual로 그 흐름을 한 번 더 다듬은 셈이에요.',
             style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 13.5,
@@ -646,7 +658,7 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
                       const SizedBox(width: 6),
                     ],
                     Text(
-                      _isSaved ? 'Ritual 기록 저장됨' : 'Ritual 기록 저장',
+                      _isSaved ? 'Ritual 완료' : 'Ritual 마치기',
                       style: TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 16,
