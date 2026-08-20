@@ -290,17 +290,12 @@ class _ConditionMeasurementScreenState
     _measurementTimer?.cancel();
     _measurementTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
-      if (!_isFingerCovered) {
-        // Pause countdown while finger is not properly touching camera & flash!
-        return;
-      }
       setState(() {
         if (_secondsLeft > 1) {
           _secondsLeft--;
           _progress = (20 - _secondsLeft) / 20.0;
           if (!kIsWeb) {
             // On mobile app devices, compute live PPG preview during measurement!
-            // On Web simulation, keep -- and - during measurement and show random result on completion.
             _lastResult = _ppgService.computeResults();
           }
         } else {

@@ -342,10 +342,9 @@ class PpgSensorService {
     debugAvgV = avgV;
     debugDiff = chromDiff;
 
-    // Strict Finger Contact Condition:
-    // Finger covering torch LED yields high V (> 160) and low U (< 115) -> chromDiff > 45
-    // Air/room light yields neutral V ~128 and U ~128 -> chromDiff < 15
-    final detected = (chromDiff > 45.0 && avgV > 150.0) || kIsWeb;
+    // Robust Finger Contact Condition across all Android cameras:
+    // Finger covering torch LED yields higher V than U (red channel predominance)
+    final detected = (chromDiff > 15.0 && avgV > 125.0) || (avgY > 80.0 && chromDiff > 10.0) || kIsWeb;
 
     if (detected != isFingerDetected) {
       isFingerDetected = detected;
