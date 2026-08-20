@@ -245,7 +245,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         hintText: '이름',
                         icon: Icons.person_outline_rounded,
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 52),
 
                       // 7. Main White Sign Up Button (회원가입)
                       GestureDetector(
@@ -272,7 +272,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                     style: TextStyle(
                                       fontFamily: AppFonts.pretendard,
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: FontWeight.w500,
                                       color: Color(0xFF1E1E20),
                                     ),
                                   ),
@@ -311,10 +311,15 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // 9. Google Social Sign Up Pill Button (Google로 시작하기)
+                      // 9. Google Social Sign Up Pill Button (Google로 계속하기)
                       _buildSocialPillButton(
-                        icon: const _GoogleGLogo(size: 20),
-                        text: 'Google로 시작하기',
+                        icon: Image.asset(
+                          'assets/images/ic_google.png',
+                          width: 22,
+                          height: 22,
+                          errorBuilder: (context, error, stackTrace) => const _GoogleGLogo(size: 20),
+                        ),
+                        text: 'Google로 계속하기',
                         onTap: _onGooglePressed,
                       ),
                       const SizedBox(height: 38),

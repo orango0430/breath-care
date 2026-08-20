@@ -226,7 +226,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     style: TextStyle(
                                       fontFamily: AppFonts.pretendard,
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: FontWeight.w500,
                                       color: Color(0xFF1E1E20),
                                     ),
                                   ),
@@ -271,7 +271,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         text: 'Google로 계속하기',
                         onTap: _onGooglePressed,
                       ),
-                      const SizedBox(height: 48),
+                      const SizedBox(height: 110),
 
                       // 9. Bottom Signup Prompt: 계정이 없으신가요? 회원가입하기
                       Center(
