@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'api_exception.dart';
@@ -30,10 +31,13 @@ class GoogleAuth {
   /// Throws [ApiException] when sign-in itself fails, so the caller can show
   /// the message as-is.
   Future<String?> idToken() async {
+    // The parenthesised codes are deliberate. The only person who can retry
+    // this is holding a phone with no debugger attached, so the message has to
+    // carry enough to say which step gave up.
     if (Firebase.apps.isEmpty) {
       throw const ApiException(
         ApiException.socialUnavailable,
-        '구글 로그인을 사용할 수 없어요. 이메일로 로그인해 주세요.',
+        '구글 로그인을 사용할 수 없어요. (E1 Firebase없음)',
       );
     }
 
@@ -48,7 +52,7 @@ class GoogleAuth {
       if (googleIdToken == null) {
         throw const ApiException(
           ApiException.socialUnavailable,
-          '구글 인증 정보를 받지 못했어요. 다시 시도해 주세요.',
+          '구글 인증 정보를 받지 못했어요. (E2 구글토큰없음)',
         );
       }
 
@@ -58,18 +62,28 @@ class GoogleAuth {
 
       // Not `getIdToken()` on a cached user — this one was just minted, so it
       // is guaranteed fresh for the round trip to our server.
-      return await result.user?.getIdToken();
+      final firebaseToken = await result.user?.getIdToken();
+      if (firebaseToken == null || firebaseToken.isEmpty) {
+        throw const ApiException(
+          ApiException.socialUnavailable,
+          '구글 로그인에 실패했어요. (E4 토큰없음)',
+        );
+      }
+      debugPrint('Firebase ID token length: ${firebaseToken.length}');
+      return firebaseToken;
     } on GoogleSignInException catch (e) {
       // Backing out of the account picker is a normal thing to do, not a
       // failure worth showing a red banner for.
       if (e.code == GoogleSignInExceptionCode.canceled) return null;
+      debugPrint('GoogleSignInException: ${e.code} ${e.description}');
       throw ApiException(ApiException.socialUnavailable, _messageFor(e));
     } on FirebaseAuthException catch (e) {
+      debugPrint('FirebaseAuthException: ${e.code} ${e.message}');
       throw ApiException(
         ApiException.socialUnavailable,
         e.code == 'operation-not-allowed'
-            ? '구글 로그인이 아직 열려 있지 않아요. 이메일로 로그인해 주세요.'
-            : '구글 로그인에 실패했어요. 다시 시도해 주세요.',
+            ? '구글 로그인이 아직 열려 있지 않아요. (E3 제공자꺼짐)'
+            : '구글 로그인에 실패했어요. (E3 ${e.code})',
       );
     }
   }
@@ -90,8 +104,8 @@ class GoogleAuth {
     // The usual cause on a real phone: this build's signing certificate is not
     // registered on the Firebase project, so Google refuses before any UI.
     if (e.code == GoogleSignInExceptionCode.clientConfigurationError) {
-      return '구글 로그인 설정이 맞지 않아요. 이메일로 로그인해 주세요.';
+      return '구글 로그인 설정이 맞지 않아요. (E5 설정오류)';
     }
-    return '구글 로그인에 실패했어요. 다시 시도해 주세요.';
+    return '구글 로그인에 실패했어요. (E5 ${e.code.name})';
   }
 }

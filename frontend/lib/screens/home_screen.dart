@@ -7,6 +7,7 @@ import '../widgets/bpace_logo.dart';
 import 'log_screen.dart';
 import 'condition_measurement_screen.dart';
 import 'recommended_breathing_screen.dart';
+import 'login_screen.dart';
 import 'my_page_screen.dart';
 import '../models/measurement.dart';
 import '../services/api_client.dart';
@@ -217,7 +218,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildProfileAvatar() {
     if (!ApiClient.instance.isLoggedIn) {
       return GestureDetector(
-        onTap: _openMyPage,
+        // Straight to the login screen, not to 마이페이지. A button that says
+        // 로그인 and opens a page titled "My page" reads as the wrong screen,
+        // and the 회원가입 link lives one more tap past that.
+        onTap: _openLogin,
         behavior: HitTestBehavior.opaque,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -263,9 +267,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Opens 마이페이지 and redraws on the way back, so the header flips between
   /// "로그인" and the avatar as soon as the user signs in or out.
-  Future<void> _openMyPage() async {
+  Future<void> _openMyPage() => _pushAndRefresh(const MyPageScreen());
+
+  Future<void> _openLogin() => _pushAndRefresh(const LoginScreen());
+
+  /// Signing in changes what every card on this screen should show, so the
+  /// data is refetched on the way back rather than left stale.
+  Future<void> _pushAndRefresh(Widget screen) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const MyPageScreen()),
+      MaterialPageRoute(builder: (context) => screen),
     );
     if (!mounted) return;
     setState(() {});
