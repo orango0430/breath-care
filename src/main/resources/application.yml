@@ -36,6 +36,8 @@ firebase:
   # 키를 주는 방법이 둘이다. base64가 있으면 그쪽이 우선이다. (FirebaseConfig 주석 참고)
   credentials-location: ${FIREBASE_CREDENTIALS:file:./firebase-service-account.json}
   credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
+  # 서비스 계정 키에서 못 읽을 때를 대비한 수동 지정. 비워 두면 키에서 꺼낸다.
+  project-id: ${FIREBASE_PROJECT_ID:}
 
 report:
   # none | gemini | openai. 켜진 제공자 하나만 빈으로 뜬다.

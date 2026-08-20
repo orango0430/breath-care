@@ -1,6 +1,7 @@
 package org.exaple.breath_care.global.firebase;
 
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
@@ -39,7 +40,8 @@ public class FirebaseConfig {
     @Bean
     public FirebaseApp firebaseApp(
             @Value("${firebase.credentials-location:}") String location,
-            @Value("${firebase.credentials-base64:}") String base64) throws IOException {
+            @Value("${firebase.credentials-base64:}") String base64,
+            @Value("${firebase.project-id:}") String configuredProjectId) throws IOException {
 
         if (!FirebaseApp.getApps().isEmpty()) {
             // devtools 재시작 시 이미 초기화돼 있을 수 있다.
@@ -47,17 +49,52 @@ public class FirebaseConfig {
         }
 
         try (InputStream in = openCredentials(location, base64)) {
-            FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(GoogleCredentials.fromStream(in))
-                    .build();
-            FirebaseApp app = FirebaseApp.initializeApp(options);
+            GoogleCredentials credentials = GoogleCredentials.fromStream(in);
+            String projectId = resolveProjectId(configuredProjectId, credentials);
 
-            // 어느 프로젝트의 키인지 남긴다. 앱의 google-services.json과 프로젝트가
-            // 다르면 소셜 로그인이 전부 INVALID_SOCIAL_TOKEN으로 떨어지는데, 그때
-            // 로그에 이 줄이 없으면 원인을 좁힐 방법이 없다.
-            log.info("Firebase 프로젝트: {}", app.getOptions().getProjectId());
+            FirebaseOptions.Builder builder = FirebaseOptions.builder()
+                    .setCredentials(credentials);
+
+            // 프로젝트 id를 반드시 박아 둔다.
+            //
+            // verifyIdToken은 토큰의 aud가 이 프로젝트인지 봐야 하므로 project id 없이는
+            // 아예 동작하지 않는다. SDK는 setProjectId가 비어 있으면 서비스 계정 키에서
+            // 꺼내 보고, 그것도 아니면 GOOGLE_CLOUD_PROJECT 환경변수를 보는데, 서비스
+            // 계정이 아닌 자격증명(gcloud 사용자 키 등)이 들어오면 셋 다 실패해서
+            // 소셜 로그인이 전부 INVALID_SOCIAL_TOKEN으로 떨어진다.
+            if (StringUtils.hasText(projectId)) {
+                builder.setProjectId(projectId);
+            }
+
+            FirebaseApp app = FirebaseApp.initializeApp(builder.build());
+
+            log.info("Firebase 초기화 완료. 자격증명={}, 프로젝트={}",
+                    credentials.getClass().getSimpleName(), projectId);
+
+            if (!StringUtils.hasText(projectId)) {
+                // 여기서 죽이지는 않는다. 푸시는 자격증명만으로 되는 경우가 있어
+                // 서버 전체를 못 뜨게 할 이유는 없다. 대신 크게 남긴다.
+                log.error("Firebase 프로젝트 id를 알 수 없습니다. 소셜 로그인이 전부 실패합니다. "
+                        + "서비스 계정 키가 맞는지 확인하거나 FIREBASE_PROJECT_ID를 설정하세요.");
+            }
             return app;
         }
+    }
+
+    /**
+     * 설정값 → 서비스 계정 키 안의 project_id 순으로 찾는다.
+     *
+     * <p>설정값을 먼저 보는 이유는, 키가 잘못 들어갔을 때 키를 다시 발급받지 않고도
+     * 환경변수 하나로 되살릴 수 있어야 하기 때문이다.
+     */
+    private String resolveProjectId(String configured, GoogleCredentials credentials) {
+        if (StringUtils.hasText(configured)) {
+            return configured.trim();
+        }
+        if (credentials instanceof ServiceAccountCredentials serviceAccount) {
+            return serviceAccount.getProjectId();
+        }
+        return null;
     }
 
     /**
