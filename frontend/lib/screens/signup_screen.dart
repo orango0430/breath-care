@@ -162,18 +162,26 @@ class _SignupScreenState extends State<SignupScreen> {
                           letterSpacing: -0.2,
                         ),
                       ),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 48),
 
-                      // 3. Email Input Field (이메일 주소)
+                      // 3. Name Input Field (이름 닉네임)
+                      _buildPillInputField(
+                        controller: _nameController,
+                        hintText: '이름 (닉네임)',
+                        icon: Icons.person_outline_rounded,
+                      ),
+                      const SizedBox(height: 14),
+
+                      // 4. Email Input Field (아이디 이메일)
                       _buildPillInputField(
                         controller: _emailController,
-                        hintText: '이메일 주소',
+                        hintText: '아이디 (이메일)',
                         icon: Icons.mail_outline_rounded,
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 14),
 
-                      // 4. Password Input Field (비밀번호)
+                      // 5. Password Input Field (비밀번호)
                       _buildPillInputField(
                         controller: _passwordController,
                         hintText: '비밀번호',
@@ -187,8 +195,8 @@ class _SignupScreenState extends State<SignupScreen> {
                           },
                           child: Icon(
                             _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
                             color: const Color(0xFF8E9198),
                             size: 20,
                           ),
@@ -196,7 +204,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // 5. Confirm Password Input Field (비밀번호 확인)
+                      // 6. Confirm Password Input Field (비밀번호 확인)
                       _buildPillInputField(
                         controller: _confirmPasswordController,
                         hintText: '비밀번호 확인',
@@ -210,32 +218,24 @@ class _SignupScreenState extends State<SignupScreen> {
                           },
                           child: Icon(
                             _obscureConfirmPassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
                             color: const Color(0xFF8E9198),
                             size: 20,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 52),
 
-                      // 6. Name Input Field (이름)
-                      _buildPillInputField(
-                        controller: _nameController,
-                        hintText: '이름',
-                        icon: Icons.person_outline_rounded,
-                      ),
-                      const SizedBox(height: 32),
-
-                      // 7. Main White Sign Up Button (회원가입)
+                      // 7. Main White Sign Up Button (회원가입하기)
                       GestureDetector(
                         onTap: _onSignupPressed,
                         child: Container(
                           width: double.infinity,
-                          height: 58,
+                          height: 56,
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(29),
+                            borderRadius: BorderRadius.circular(28),
                           ),
                           child: Center(
                             child: _isSubmitting
@@ -248,21 +248,20 @@ class _SignupScreenState extends State<SignupScreen> {
                                     ),
                                   )
                                 : const Text(
-                                    '회원가입',
+                                    '회원가입하기',
                                     style: TextStyle(
                                       fontFamily: AppFonts.pretendard,
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: FontWeight.w500,
                                       color: Color(0xFF1E1E20),
                                     ),
                                   ),
                           ),
-                          ),
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 14),
 
-                      // 8. Horizontal Divider with "or"
+                      // 8. Horizontal Divider with "or" (Tightly grouped)
                       Row(
                         children: [
                           Expanded(
@@ -290,24 +289,24 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 14),
 
-                      // 9. Google Social Sign Up Pill Button (Google로 시작하기)
+                      // 9. Google Social Sign Up Pill Button (Google로 계속하기 with assets/images/ic_google.png support)
                       _buildSocialPillButton(
-                        icon: const _GoogleGLogo(size: 20),
-                        text: 'Google로 시작하기',
+                        icon: Image.asset(
+                          'assets/images/ic_google.png',
+                          width: 22,
+                          height: 22,
+                          errorBuilder: (context, error, stackTrace) => const _GoogleGLogo(size: 20),
+                        ),
+                        text: 'Google로 계속하기',
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Google 회원가입 연동 중...'),
-                              duration: Duration(seconds: 1),
-                            ),
-                          );
+                          // Silent placeholder for future Google signup OAuth API
                         },
                       ),
-                      const SizedBox(height: 38),
+                      const SizedBox(height: 64),
 
-                      // 10. Bottom Login Prompt: 이미 계정이 있으신가요? 로그인하기
+                      // 10. Bottom Login Prompt: 이미 계정이 있으신가요? 로그인하기 (Pushed lower to bottom)
                       Center(
                         child: GestureDetector(
                           onTap: () {
@@ -325,7 +324,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 TextSpan(
                                   text: '로그인하기',
                                   style: TextStyle(
-                                    fontWeight: FontWeight.w400,
+                                    fontWeight: FontWeight.w500,
                                     color: AppColors.white,
                                   ),
                                 ),
@@ -334,7 +333,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),

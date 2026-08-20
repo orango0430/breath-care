@@ -391,14 +391,7 @@ class _RecommendedBreathingScreenState
         Row(
           children: [
             IconButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('알림함으로 이동합니다.'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
+              onPressed: () {},
               icon: const Icon(
                 Icons.notifications_none_rounded,
                 color: AppColors.white,

@@ -88,8 +88,10 @@ class ScheduleStorageService {
     await _saveToPrefs();
   }
 
-  /// Complete a schedule by title or ID (when breathing ritual is completed)
-  static Future<void> completeSchedule(String titleOrId) async {
+  /// Complete a schedule by title or ID (when breathing ritual is completed via schedule flow)
+  static Future<void> completeSchedule(String? titleOrId) async {
+    if (titleOrId == null || titleOrId.trim().isEmpty) return;
+
     final current = await loadSchedules();
     bool updated = false;
     for (var s in current) {
@@ -99,18 +101,10 @@ class ScheduleStorageService {
       }
     }
 
-    // If no match found, complete the first uncompleted schedule
-    if (!updated) {
-      for (var s in current) {
-        if (s['isCompleted'] != true) {
-          s['isCompleted'] = true;
-          break;
-        }
-      }
+    if (updated) {
+      _cachedSchedules = current;
+      await _saveToPrefs();
     }
-
-    _cachedSchedules = current;
-    await _saveToPrefs();
   }
 
   /// Update an existing schedule

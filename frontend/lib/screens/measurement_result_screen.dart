@@ -5,17 +5,20 @@ import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
 import '../utils/ppg_sensor_service.dart';
 import '../utils/breathing_routine_model.dart';
+import '../utils/schedule_storage_service.dart';
 import 'breathing_exercise_screen.dart';
 import 'log_screen.dart';
 
 class MeasurementResultScreen extends StatefulWidget {
   final PpgMeasurementResult? result;
   final BreathingRoutineModel? routine;
+  final String? targetScheduleId;
 
   const MeasurementResultScreen({
     super.key,
     this.result,
     this.routine,
+    this.targetScheduleId,
   });
 
   @override
@@ -24,34 +27,167 @@ class MeasurementResultScreen extends StatefulWidget {
 }
 
 class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
+  int? _pastAvgScore;
+  int? _pastAvgHr;
+  int? _pastAvgHrv;
+  Map<String, dynamic>? _upcomingSchedule;
+
   @override
   void initState() {
     super.initState();
-    _saveToPrefs();
+    _loadScheduleAndSavePrefs();
   }
 
-  Future<void> _saveToPrefs() async {
-    final activeResult = widget.result ?? PpgMeasurementResult.defaultSample();
-    final score =
-        (activeResult.hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
+  Future<void> _loadScheduleAndSavePrefs() async {
     final prefs = await SharedPreferences.getInstance();
+    final activeResult = widget.result ?? PpgMeasurementResult.defaultSample();
+    final score = (activeResult.hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
+
+    // 1. Calculate past score average from condition_score_history
+    final history = prefs.getStringList('condition_score_history') ?? ['72', '76', '70', '74'];
+    if (history.isNotEmpty) {
+      final int sum = history.map((e) => int.tryParse(e) ?? 72).reduce((a, b) => a + b);
+      _pastAvgScore = (sum / history.length).round();
+    } else {
+      _pastAvgScore = 72;
+    }
+
+    // Calculate past HR average from hr_history
+    final hrHistory = prefs.getStringList('hr_history') ?? ['74', '80', '76'];
+    if (hrHistory.isNotEmpty) {
+      final int sumHr = hrHistory.map((e) => int.tryParse(e) ?? 75).reduce((a, b) => a + b);
+      _pastAvgHr = (sumHr / hrHistory.length).round();
+    } else {
+      _pastAvgHr = 75;
+    }
+
+    // Calculate past HRV average from hrv_history_v2
+    final hrvHistory = prefs.getStringList('hrv_history_v2') ?? [];
+    if (hrvHistory.isNotEmpty) {
+      final List<int> vals = [];
+      for (final item in hrvHistory) {
+        final parts = item.split(':');
+        if (parts.length >= 2) {
+          final v = int.tryParse(parts[1]);
+          if (v != null) vals.add(v);
+        }
+      }
+      if (vals.isNotEmpty) {
+        _pastAvgHrv = (vals.reduce((a, b) => a + b) / vals.length).round();
+      } else {
+        _pastAvgHrv = 24;
+      }
+    } else {
+      _pastAvgHrv = 24;
+    }
+
+    // Save current score into history
+    history.add(score.toString());
+    await prefs.setStringList('condition_score_history', history);
     await prefs.setInt('latest_condition_score', score);
     await prefs.setInt('latest_bpm', activeResult.bpm);
     await prefs.setInt('latest_hrv', activeResult.hrvSdnnMs.round());
 
-    final history = prefs.getStringList('condition_score_history') ?? ['57', '81', '92', '84'];
-    history.add(score.toString());
-    await prefs.setStringList('condition_score_history', history);
-
-    final hrHistory = prefs.getStringList('hr_history') ?? [];
     hrHistory.add(activeResult.bpm.toString());
     await prefs.setStringList('hr_history', hrHistory);
 
-    final hrvHistory = prefs.getStringList('hrv_history_v2') ?? [];
-    final weekday = DateTime.now().weekday; // 1 = Mon, 7 = Sun
+    final weekday = DateTime.now().weekday;
     final hrvVal = activeResult.hrvSdnnMs.round();
-    hrvHistory.add('$weekday:$hrvVal');
-    await prefs.setStringList('hrv_history_v2', hrvHistory);
+    final newHrvHistory = List<String>.from(hrvHistory);
+    newHrvHistory.add('$weekday:$hrvVal');
+    await prefs.setStringList('hrv_history_v2', newHrvHistory);
+
+    // 2. Load today's upcoming schedule closest to current time (irrespective of isCompleted)
+    final now = DateTime.now();
+    final allSchedules = await ScheduleStorageService.loadSchedules();
+
+    // Filter schedules for today
+    final todaySchedules = allSchedules.where((s) {
+      DateTime sDate;
+      if (s['date'] is DateTime) {
+        sDate = s['date'] as DateTime;
+      } else if (s['date'] is String) {
+        try {
+          sDate = DateTime.parse(s['date'] as String);
+        } catch (_) {
+          sDate = now;
+        }
+      } else {
+        sDate = now;
+      }
+      return sDate.year == now.year && sDate.month == now.month && sDate.day == now.day;
+    }).toList();
+
+    // Filter upcoming schedules where parsed schedule time is in the future relative to current time
+    final upcomingList = <Map<String, dynamic>>[];
+    for (var s in todaySchedules) {
+      final dt = _parseScheduleTime(s['date'], s['time'] as String?);
+      if (dt != null) {
+        // Allow a 5-min grace window so if user arrives right at schedule time it still shows
+        if (dt.isAfter(now.subtract(const Duration(minutes: 5)))) {
+          upcomingList.add({
+            'schedule': s,
+            'dateTime': dt,
+          });
+        }
+      }
+    }
+
+    if (upcomingList.isNotEmpty) {
+      // Sort upcoming schedules ascending by time (closest upcoming first!)
+      upcomingList.sort((a, b) => (a['dateTime'] as DateTime).compareTo(b['dateTime'] as DateTime));
+      _upcomingSchedule = upcomingList.first['schedule'] as Map<String, dynamic>;
+    } else {
+      // If no upcoming schedule left today, do not display schedule box
+      _upcomingSchedule = null;
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  DateTime? _parseScheduleTime(dynamic dateVal, String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return null;
+
+    DateTime baseDate;
+    if (dateVal is DateTime) {
+      baseDate = dateVal;
+    } else if (dateVal is String) {
+      try {
+        baseDate = DateTime.parse(dateVal);
+      } catch (_) {
+        baseDate = DateTime.now();
+      }
+    } else {
+      baseDate = DateTime.now();
+    }
+
+    try {
+      final isPm = timeStr.contains('오후');
+      final cleanStr = timeStr.replaceAll('오전', '').replaceAll('오후', '').trim();
+      final parts = cleanStr.split(':');
+      if (parts.length >= 2) {
+        int hour = int.parse(parts[0].trim());
+        int minute = int.parse(parts[1].trim());
+
+        if (isPm && hour < 12) {
+          hour += 12;
+        } else if (!isPm && hour == 12 && timeStr.contains('오전')) {
+          hour = 0;
+        }
+
+        return DateTime(
+          baseDate.year,
+          baseDate.month,
+          baseDate.day,
+          hour,
+          minute,
+        );
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   @override
@@ -71,104 +207,80 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
         child: ResponsiveContainer(
           maxWidth: 600,
           padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Column(
+          child: Stack(
             children: [
-              const SizedBox(height: 12),
-              // Top Header Row (Back button)
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    icon: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: AppColors.white,
-                      size: 24,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.only(top: 12.0, bottom: 32.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 1. AAC Event Schedule Card
+              // Scrollable Content (Scrolls beneath floating bottom buttons, matching Image 1)
+              SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.only(top: 48.0, bottom: 80.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. Schedule Card (Only displayed if an upcoming schedule exists today)
+                    if (_upcomingSchedule != null) ...[
                       _buildScheduleCard(),
                       const SizedBox(height: 16),
-
-                      // 2. Condition Score Card
-                      _buildConditionScoreCard(conditionScore),
-                      const SizedBox(height: 24),
-
-                      // 3. Measurement Result Cards Row (HR Soft Blue & HRV Pastel Yellow)
-                      _buildMeasurementResultSection(context, activeResult),
-                      const SizedBox(height: 24),
-
-                      // 4. AI Analysis Card
-                      _buildAiAnalysisSection(conditionScore, activeRoutine, activeResult),
-                      const SizedBox(height: 28),
-
-                      // 5. "맞춤 호흡 시작하기" Full CTA Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => BreathingExerciseScreen(
-                                  title: activeRoutine.title,
-                                  routineModel: activeRoutine,
-                                  initialInhaleSec: activeResult.measuredInhaleSec,
-                                  initialExhaleSec: activeResult.measuredExhaleSec,
-                                  isAdaptiveRamp: true, // 측정 결과 화면에서 진입 시 내 측정 호흡에서 60초간 점진 유도 (Ramp)!
-                                ),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.lightMint,
-                            foregroundColor: AppColors.darkBg,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                          ),
-                          child: Text(
-                            '${activeRoutine.title} 시작하기',
-                            style: const TextStyle(
-                              fontFamily: AppFonts.pretendard,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // 6. Medical Disclaimer Footer Text
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4.0),
-                        child: Text(
-                          '이 결과는 의료 진단·치료·응급 판단을 위한 정보가 아닌 웰빙 참고용입니다.\n심각한 증상이나 응급 상황이라면 의료기관 또는 119에 연락하세요.',
-                          style: TextStyle(
-                            fontFamily: AppFonts.pretendard,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.slateGray,
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
                     ],
+
+                    // 2. Condition Score Card
+                    _buildConditionScoreCard(conditionScore, _pastAvgScore),
+                    const SizedBox(height: 24),
+
+                    // 3. Measurement Result Cards Row (HR Soft Blue & HRV Pastel Yellow)
+                    _buildMeasurementResultSection(context, activeResult),
+                    const SizedBox(height: 24),
+
+                    // 4. AI Analysis Card
+                    _buildAiAnalysisSection(conditionScore, activeRoutine, activeResult),
+                    const SizedBox(height: 24),
+
+                    // 5. Medical Disclaimer Footer Text
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Text(
+                        '이 결과는 의료 진단·치료·응급 판단을 위한 정보가 아닌 웰빙 참고용입니다.\n심각한 증상이나 응급 상황이라면 의료기관 또는 119에 연락하세요.',
+                        style: TextStyle(
+                          fontFamily: AppFonts.pretendard,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.slateGray,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+
+              // Top Header Row (Back button floating on top left)
+              Positioned(
+                top: 12,
+                left: 0,
+                child: IconButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  icon: const Icon(
+                    Icons.arrow_back_rounded,
+                    color: AppColors.white,
+                    size: 24,
                   ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ),
+
+              // Bottom Floating Action Row (Floating without solid background block, matching Image 1)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 12,
+                child: _buildFixedBottomNavigationBar(
+                  context,
+                  activeRoutine,
+                  activeResult,
+                  conditionScore,
                 ),
               ),
             ],
@@ -178,8 +290,13 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
     );
   }
 
-  /// 1. AAC Event Schedule Card
+  /// 1. Schedule Header Box (Displays closest upcoming schedule today; hidden if none)
   Widget _buildScheduleCard() {
+    if (_upcomingSchedule == null) return const SizedBox.shrink();
+
+    final title = _upcomingSchedule!['title'] as String? ?? '프로젝트 회의 일정';
+    final time = _upcomingSchedule!['time'] as String? ?? '오후 2:30';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
@@ -190,12 +307,12 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
           width: 0.8,
         ),
       ),
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'AAC 해커톤 면접 일정',
-            style: TextStyle(
+            title,
+            style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 14,
               fontWeight: FontWeight.w400,
@@ -204,15 +321,15 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
           ),
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.access_time_rounded,
                 color: AppColors.lightGray,
                 size: 14,
               ),
-              SizedBox(width: 4),
+              const SizedBox(width: 4),
               Text(
-                '오후 2:30',
-                style: TextStyle(
+                time,
+                style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
@@ -227,7 +344,32 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
   }
 
   /// 2. Condition Score Card
-  Widget _buildConditionScoreCard(int score) {
+  Widget _buildConditionScoreCard(int score, int? pastAvg) {
+    // 1st Subtext Line: Recommendation based on score
+    final String headlineText;
+    if (score >= 80) {
+      headlineText = '최상의 컨디션이에요! Ritual로 유지해보세요.';
+    } else if (score >= 65) {
+      headlineText = '안정적인 흐름이에요. Ritual로 완성해보세요';
+    } else {
+      headlineText = '피로도가 다소 누적되었습니다. 호흡으로 이완해보세요.';
+    }
+
+    // 2nd Subtext Line: Comparison with past average
+    final String comparisonText;
+    if (pastAvg != null) {
+      final diff = score - pastAvg;
+      if (diff > 0) {
+        comparisonText = '지난주 평균보다 $diff점 높아요';
+      } else if (diff < 0) {
+        comparisonText = '지난주 평균보다 ${diff.abs()}점 낮아요';
+      } else {
+        comparisonText = '지난주 평균과 동일한 점수예요';
+      }
+    } else {
+      comparisonText = '오늘 첫 컨디션을 측정했어요';
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -255,7 +397,7 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -267,7 +409,7 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
                       fontFamily: AppFonts.pretendard,
                       fontSize: 42,
                       fontWeight: FontWeight.w400,
-                      color: AppColors.white,
+                      color: AppColors.lightMint,
                       height: 1.0,
                     ),
                   ),
@@ -304,12 +446,9 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
           ),
           const SizedBox(height: 18),
 
+          // 1st Line: Recommendation based on score
           Text(
-            score >= 80
-                ? '최상의 컨디션이에요! 루틴으로 유지해보세요.'
-                : (score >= 65
-                    ? '안정적인 흐름이에요. Ritual로 완벽히 리프레시해보세요.'
-                    : '피로도가 다소 누적되었습니다. 호흡으로 이완해보세요.'),
+            headlineText,
             style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 14,
@@ -318,8 +457,10 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
             ),
           ),
           const SizedBox(height: 4),
+
+          // 2nd Line: Past average comparison
           Text(
-            '지난주 평균보다 ${score >= 75 ? (score - 72) : 3}점 ${score >= 72 ? "높아요" : "낮아요"}',
+            comparisonText,
             style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 12,
@@ -357,14 +498,28 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
   /// 3. Measurement Result Section (HR Soft Blue & HRV Pastel Yellow)
   Widget _buildMeasurementResultSection(
       BuildContext context, PpgMeasurementResult res) {
-    final hrStatus = res.bpm > 85
-        ? '↑ 약간 높음'
-        : (res.bpm < 65 ? '↓ 안정적' : '✓ 정상 범위');
+    // Dynamic comparison for HR (bpm)
+    final avgHr = _pastAvgHr ?? 75;
+    final String hrStatus;
+    if (res.bpm > avgHr + 3) {
+      hrStatus = '↑ 평균 이상';
+    } else if (res.bpm < avgHr - 3) {
+      hrStatus = '↓ 평균 이하';
+    } else {
+      hrStatus = '✓ 평균 수준';
+    }
 
-    final hrvVal = res.hrvSdnnMs.toStringAsFixed(1);
-    final hrvStatus = res.hrvSdnnMs > 35.0
-        ? '✓ 매우 우수'
-        : (res.hrvSdnnMs > 22.0 ? '✓ 정상 범위' : '↓ 피로도 높음');
+    // Dynamic comparison for HRV (ms)
+    final avgHrv = _pastAvgHrv ?? 24;
+    final hrvInt = res.hrvSdnnMs.round();
+    final String hrvStatus;
+    if (hrvInt > avgHrv + 2) {
+      hrvStatus = '↑ 평균 이상';
+    } else if (hrvInt < avgHrv - 2) {
+      hrvStatus = '↓ 평균 이하';
+    } else {
+      hrvStatus = '✓ 평균 수준';
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -384,11 +539,10 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
             ),
             InkWell(
               onTap: () {
-                Navigator.of(context).pushAndRemoveUntil(
+                Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => const LogScreen(initialSubTab: 2),
                   ),
-                  (route) => false,
                 );
               },
               borderRadius: BorderRadius.circular(6),
@@ -561,7 +715,7 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          hrvVal,
+                          '$hrvInt',
                           style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 32,
@@ -604,14 +758,11 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
 
   /// 4. AI Analysis Card
   Widget _buildAiAnalysisSection(int score, BreathingRoutineModel routine, PpgMeasurementResult res) {
-    final inhaleStr = res.measuredInhaleSec.toStringAsFixed(1);
-    final exhaleStr = res.measuredExhaleSec.toStringAsFixed(1);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'AI 분석 · 현재 상태',
+          'AI 분석 · 호흡 추천',
           style: TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 17,
@@ -646,8 +797,20 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Text(
-                '오늘 일정을 종합 분석한 결과입니다.\n지금 컨디션에 맞춰 "${routine.title}"(으)로 리듬을 정돈해보세요.',
+              Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(text: '오늘 일정을 종합 분석한 결과입니다.\n지금 컨디션에 맞춰 '),
+                    TextSpan(
+                      text: routine.title,
+                      style: const TextStyle(
+                        color: AppColors.lightMint,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const TextSpan(text: '(으)로 리듬을 정돈해보세요.'),
+                  ],
+                ),
                 style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 13.5,
@@ -656,44 +819,92 @@ class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
                   height: 1.5,
                 ),
               ),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.lightMint.withAlpha(20),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.lightMint.withAlpha(60),
-                    width: 0.8,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.auto_awesome_rounded,
-                      color: AppColors.lightMint,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '측정된 호흡(들숨 $inhaleStr초 / 날숨 $exhaleStr초)에서 시작하여 1분 30초간 ${routine.title} 목표 템포로 부드럽게 맞춤 조율됩니다.',
-                        style: const TextStyle(
-                          fontFamily: AppFonts.pretendard,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.lightMint,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  /// Fixed Bottom Navigation Bar Area (Circular Home Button with Nav Home Icon + Ritual 시작하기 Mint Pill Button)
+  Widget _buildFixedBottomNavigationBar(
+    BuildContext context,
+    BreathingRoutineModel activeRoutine,
+    PpgMeasurementResult activeResult,
+    int conditionScore,
+  ) {
+    return Row(
+      children: [
+          // Left: Circular Home Icon Button (Navigates to Home using exact nav_home.png icon)
+          InkWell(
+            onTap: () {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+            borderRadius: BorderRadius.circular(26),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: Color(0xFF2B2D32),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Image.asset(
+                  'assets/images/nav_home.png',
+                  width: 22,
+                  height: 22,
+                  color: AppColors.white,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.home_rounded,
+                    color: AppColors.white,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Right: Ritual 시작하기 Full Mint Green Pill Button
+          Expanded(
+            child: SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => BreathingExerciseScreen(
+                        title: activeRoutine.title,
+                        routineModel: activeRoutine,
+                        initialInhaleSec: activeResult.measuredInhaleSec,
+                        initialExhaleSec: activeResult.measuredExhaleSec,
+                        isAdaptiveRamp: true,
+                        targetScheduleId: widget.targetScheduleId,
+                      ),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.lightMint,
+                  foregroundColor: AppColors.darkBg,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+                ),
+                child: const Text(
+                  'Ritual 시작하기',
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFF1E221E),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
   }
 }

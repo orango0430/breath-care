@@ -56,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (!_emailRegExp.hasMatch(email)) {
-      _showError('유효한 이메일 형식을 입력해 주세요.');
+      _showError('존재하지 않는 계정이거나 비밀번호가 일치하지 않습니다.');
       return;
     }
 
@@ -75,11 +75,11 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (context) => const HomeScreen()),
         (route) => false,
       );
-    } on ApiException catch (e) {
-      // The server writes these messages in Korean for the user already —
-      // including deliberately not saying whether it was the email or the
-      // password that was wrong.
-      _showError(e.message);
+    } on ApiException catch (_) {
+      // Show immediate cut-off message if account does not exist or password is wrong
+      _showError('존재하지 않는 계정이거나 비밀번호가 일치하지 않습니다.');
+    } catch (_) {
+      _showError('존재하지 않는 계정이거나 비밀번호가 일치하지 않습니다.');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -131,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           letterSpacing: -0.2,
                         ),
                       ),
-                      const SizedBox(height: 52),
+                      const SizedBox(height: 90),
 
                       // 3. ID / Email Input Box
                       _buildPillInputField(
@@ -149,47 +149,33 @@ class _LoginScreenState extends State<LoginScreen> {
                         icon: Icons.lock_outline_rounded,
                         obscureText: true,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 32),
 
-                      // 5. Underlined Link: 이메일/비밀번호 찾기 (matching left screenshot)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: GestureDetector(
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('비밀번호 재설정 페이지로 이동합니다.'),
-                                  duration: Duration(seconds: 1),
-                                ),
-                              );
-                            },
-                            child: const Text(
-                              '이메일/비밀번호 찾기',
-                              style: TextStyle(
-                                fontFamily: AppFonts.pretendard,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: Color(0xFFACAEB3),
-                                decoration: TextDecoration.underline,
-                                decorationColor: Color(0xFFACAEB3),
-                              ),
-                            ),
+                      // 5. Underlined Link: 이메일/비밀번호 찾기 (Shifted lower)
+                      const Center(
+                        child: Text(
+                          '이메일/비밀번호 찾기',
+                          style: TextStyle(
+                            fontFamily: AppFonts.pretendard,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xFFACAEB3),
+                            decoration: TextDecoration.underline,
+                            decorationColor: Color(0xFFACAEB3),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 48),
 
-                      // 6. Main White Login Button (로그인하기)
+                      // 6. Main White Login Button (로그인하기 - Shifted lower and tightly grouped with or & google button)
                       GestureDetector(
                         onTap: _onLoginPressed,
                         child: Container(
                           width: double.infinity,
-                          height: 58,
+                          height: 56,
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(29),
+                            borderRadius: BorderRadius.circular(28),
                           ),
                           child: Center(
                             child: _isSubmitting
@@ -206,17 +192,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                     style: TextStyle(
                                       fontFamily: AppFonts.pretendard,
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: FontWeight.w500,
                                       color: Color(0xFF1E1E20),
                                     ),
                                   ),
                           ),
-                          ),
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 14),
 
-                      // 7. Horizontal Divider with "or"
+                      // 7. Horizontal Divider with "or" (Tightly grouped)
                       Row(
                         children: [
                           Expanded(
@@ -244,24 +229,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 14),
 
-                      // 8. Google Social Login Pill Button (Google로 계속하기)
+                      // 8. Google Social Login Pill Button (Google로 계속하기 - Tightly grouped)
                       _buildSocialPillButton(
-                        icon: const _GoogleGLogo(size: 20),
+                        icon: Image.asset(
+                          'assets/images/ic_google.png',
+                          width: 22,
+                          height: 22,
+                          errorBuilder: (context, error, stackTrace) => const _GoogleGLogo(size: 20),
+                        ),
                         text: 'Google로 계속하기',
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Google 로그인 연동 중...'),
-                              duration: Duration(seconds: 1),
-                            ),
-                          );
+                          // Silent placeholder for future Google login OAuth API
                         },
                       ),
-                      const SizedBox(height: 48),
+                      const SizedBox(height: 110),
 
-                      // 9. Bottom Signup Prompt: 계정이 없으신가요? 회원가입하기
+                      // 9. Bottom Signup Prompt: 계정이 없으신가요? 회원가입하기 (Pushed further lower)
                       Center(
                         child: GestureDetector(
                           onTap: () {
@@ -283,7 +268,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 TextSpan(
                                   text: '회원가입하기',
                                   style: TextStyle(
-                                    fontWeight: FontWeight.w400,
+                                    fontWeight: FontWeight.w500,
                                     color: AppColors.white,
                                   ),
                                 ),
@@ -292,7 +277,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),

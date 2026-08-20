@@ -103,15 +103,15 @@ class _MyPageScreenState extends State<MyPageScreen> {
               ),
               const SizedBox(height: 28),
 
-              // User Profile Section (GUEST Avatar & GUEST Text -> Tap opens LoginScreen)
+              // User Profile Section (Maintains Guest Profile & Sign Up / Log In)
               GestureDetector(
                 onTap: _onProfileTapped,
                 behavior: HitTestBehavior.opaque,
                 child: Row(
                   children: [
                     Container(
-                      width: 56,
-                      height: 56,
+                      width: 64,
+                      height: 64,
                       decoration: BoxDecoration(
                         color: AppColors.slateDarkGray.withAlpha(150),
                         shape: BoxShape.circle,
@@ -120,10 +120,22 @@ class _MyPageScreenState extends State<MyPageScreen> {
                           width: 1,
                         ),
                       ),
-                      child: const Icon(
-                        Icons.person_rounded,
-                        color: AppColors.lightGray,
-                        size: 32,
+                      child: ClipOval(
+                        child: _isLoggedIn
+                            ? Image.asset(
+                                'assets/images/user_avatar.png',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => const Icon(
+                                  Icons.person_rounded,
+                                  color: AppColors.lightGray,
+                                  size: 36,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.person_rounded,
+                                color: AppColors.lightGray,
+                                size: 36,
+                              ),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -131,22 +143,22 @@ class _MyPageScreenState extends State<MyPageScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _isLoggedIn ? '로그인됨' : 'GUEST',
+                          _isLoggedIn ? '멋쟁이사자' : 'GUEST',
                           style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.w400,
                             color: AppColors.white,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _isLoggedIn ? '로그아웃하기 >' : '로그인 / 회원가입하기 >',
+                          _isLoggedIn ? 'Lionking@gmail.com' : '로그인 / 회원가입하기 >',
                           style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
-                            fontSize: 12,
+                            fontSize: 14,
                             fontWeight: FontWeight.w400,
-                            color: AppColors.lightMint,
+                            color: AppColors.slateGray,
                           ),
                         ),
                       ],
@@ -154,107 +166,118 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
-              // Card 1: 이번 주 Ritual (Light Mint Wide Card)
+              // Card 1: 이번 주 Ritual (Light Mint Wide Card with weekly_ritual_card.png graphic)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                height: 125,
                 decoration: BoxDecoration(
                   color: AppColors.lightMint,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(22),
                 ),
-                child: Stack(
-                  children: [
-                    // Decorative Background Polygon Shapes
-                    Positioned(
-                      right: 10,
-                      top: 0,
-                      bottom: 0,
-                      child: Opacity(
-                        opacity: 0.25,
-                        child: Row(
-                          children: [
-                            Transform.rotate(
-                              angle: 0.3,
-                              child: Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: Colors.black26,
-                                  borderRadius: BorderRadius.circular(12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: Stack(
+                    children: [
+                      // Right Side Image / Graphic (weekly_ritual_card.png matching screenshot)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Image.asset(
+                          'assets/images/weekly_ritual_card.png',
+                          fit: BoxFit.contain,
+                          alignment: Alignment.centerRight,
+                          errorBuilder: (context, error, stackTrace) => Opacity(
+                            opacity: 0.3,
+                            child: Row(
+                              children: [
+                                Transform.rotate(
+                                  angle: 0.3,
+                                  child: Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black26,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Transform.rotate(
-                              angle: -0.4,
-                              child: Container(
-                                width: 68,
-                                height: 68,
-                                decoration: BoxDecoration(
-                                  color: Colors.black26,
-                                  borderRadius: BorderRadius.circular(16),
+                                const SizedBox(width: 8),
+                                Transform.rotate(
+                                  angle: -0.4,
+                                  child: Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black26,
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
 
-                    // Main Content
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '이번 주 Ritual',
-                              style: TextStyle(
-                                fontFamily: AppFonts.pretendard,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: AppColors.darkBg,
+                    // Content Overlay
+                    Padding(
+                      padding: const EdgeInsets.all(18.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '이번 주 Ritual',
+                                style: TextStyle(
+                                  fontFamily: AppFonts.pretendard,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.darkBg,
+                                ),
                               ),
-                            ),
-                            _NorthEastButton(),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            const Text(
-                              '5',
-                              style: TextStyle(
-                                fontFamily: AppFonts.pretendard,
-                                fontSize: 38,
-                                fontWeight: FontWeight.w400,
-                                color: AppColors.darkBg,
-                                height: 1,
+                              _NorthEastButton(),
+                            ],
+                          ),
+                          const Spacer(),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              const Text(
+                                '5',
+                                style: TextStyle(
+                                  fontFamily: AppFonts.pretendard,
+                                  fontSize: 38,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.darkBg,
+                                  height: 1.0,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '회',
-                              style: TextStyle(
-                                fontFamily: AppFonts.pretendard,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w400,
-                                color: AppColors.darkBg.withAlpha(200),
+                              const SizedBox(width: 6),
+                              Text(
+                                '회',
+                                style: TextStyle(
+                                  fontFamily: AppFonts.pretendard,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.darkBg.withAlpha(200),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+            ),
+            const SizedBox(height: 14),
 
               // Card 2 & 3: Side-by-Side Stats Cards (총 시간 & 연속 기록)
               Row(
@@ -262,7 +285,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   // Left Card: 총 시간 (Soft Blue)
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.all(18),
+                      height: 110,
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: AppColors.softBlue,
                         borderRadius: BorderRadius.circular(20),
@@ -285,7 +309,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                               _NorthEastButton(),
                             ],
                           ),
-                          const SizedBox(height: 22),
+                          const Spacer(),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
@@ -294,10 +318,10 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 '326',
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
-                                  fontSize: 34,
+                                  fontSize: 32,
                                   fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg,
-                                  height: 1,
+                                  height: 1.0,
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -305,7 +329,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 '분',
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg.withAlpha(200),
                                 ),
@@ -318,10 +342,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   ),
                   const SizedBox(width: 14),
 
-                  // Right Card: 연속 기록 (Soft Yellow)
+                  // Right Card: 연속 기록 (Pastel Yellow)
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.all(18),
+                      height: 110,
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: AppColors.pastelYellow,
                         borderRadius: BorderRadius.circular(20),
@@ -344,7 +369,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                               _NorthEastButton(),
                             ],
                           ),
-                          const SizedBox(height: 22),
+                          const Spacer(),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
@@ -353,10 +378,10 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 '7',
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
-                                  fontSize: 34,
+                                  fontSize: 32,
                                   fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg,
-                                  height: 1,
+                                  height: 1.0,
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -364,7 +389,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 '일',
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg.withAlpha(200),
                                 ),

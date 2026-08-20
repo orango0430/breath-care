@@ -11,7 +11,6 @@ import '../utils/breathing_routine_model.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
 import '../services/measurement_service.dart';
-import '../utils/schedule_storage_service.dart';
 import 'measurement_result_screen.dart';
 
 /// `analyzing` covers the round trip to the server: the take is finished but
@@ -36,6 +35,8 @@ class _ConditionMeasurementScreenState
     with SingleTickerProviderStateMixin {
   // Whether to display the preparation guide modal overlay (Default false on entry)
   bool _showGuideSheet = false;
+  // Whether to display the quit confirmation modal overlay ("측정을 그만두시겠어요?")
+  bool _showQuitDialog = false;
 
   // PageController for guide modal slides (0..2)
   final PageController _guidePageController = PageController();
@@ -78,13 +79,59 @@ class _ConditionMeasurementScreenState
     setState(() {
       _showGuideSheet = false;
     });
+    // 측정 중이었던 경우 가이드 닫을 때 측정 및 파형 애니메이션 재개!
+    if (_status == MeasurementStatus.measuring) {
+      if (!_waveAnimationController.isAnimating) {
+        _waveAnimationController.repeat();
+      }
+      _startTimerSimulation();
+    }
   }
 
   void _openGuideSheet() {
+    // 팝업이 뜨는 순간 타이머, 파형 그래프, 측정을 일시 정지시킴!
+    _measurementTimer?.cancel();
+    if (_waveAnimationController.isAnimating) {
+      _waveAnimationController.stop();
+    }
     setState(() {
       _showGuideSheet = true;
       _currentGuidePage = 0;
     });
+  }
+
+  /// 팝업이 뜨는 순간 타이머, 파형 그래프, 측정을 일시 정지시킴!
+  void _showQuitConfirmation() {
+    _measurementTimer?.cancel();
+    if (_waveAnimationController.isAnimating) {
+      _waveAnimationController.stop();
+    }
+    setState(() {
+      _showQuitDialog = true;
+    });
+  }
+
+  /// '측정하기' 선택 시 팝업 닫고 측정 및 애니메이션 재개!
+  void _resumeFromQuitConfirmation() {
+    setState(() {
+      _showQuitDialog = false;
+    });
+    if (_status == MeasurementStatus.measuring) {
+      if (!_waveAnimationController.isAnimating) {
+        _waveAnimationController.repeat();
+      }
+      _startTimerSimulation();
+    }
+  }
+
+  /// '그만두기' 선택 시 카메라 끄고 화면에서 완전히 이탈!
+  void _quitAndExit() {
+    _measurementTimer?.cancel();
+    if (_waveAnimationController.isAnimating) {
+      _waveAnimationController.stop();
+    }
+    _ppgService.stopCamera();
+    Navigator.of(context).pop();
   }
 
   // Handle bottom action button click to cycle between waiting -> measuring -> completed -> Navigate to Analysis Result
@@ -101,9 +148,6 @@ class _ConditionMeasurementScreenState
             hrvSdnn: res.hrvSdnnMs,
           );
 
-      // Complete schedule in storage
-      await ScheduleStorageService.completeSchedule(widget.scheduleTitle ?? '');
-
       // Navigate to MeasurementResultScreen (측정 결과 화면) with result & routine
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -112,6 +156,7 @@ class _ConditionMeasurementScreenState
               MeasurementResultScreen(
             result: res,
             routine: routine,
+            targetScheduleId: widget.scheduleTitle,
           ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
@@ -254,11 +299,9 @@ class _ConditionMeasurementScreenState
         if (_secondsLeft > 1) {
           _secondsLeft--;
           _progress = (20 - _secondsLeft) / 20.0;
-          if (kIsWeb) {
-            // Live web simulation sample update. On a device there is nothing
-            // to show yet — the numbers only exist once the server has seen
-            // the waveform, and computing a preview here would put a second,
-            // different answer on screen a moment before the real one.
+          if (!kIsWeb) {
+            // On mobile app devices, compute live PPG preview during measurement!
+            // On Web simulation, keep -- and - during measurement and show random result on completion.
             _lastResult = _ppgService.computeResults();
           }
         } else {
@@ -272,6 +315,9 @@ class _ConditionMeasurementScreenState
 
   Future<void> _setCompletedState() async {
     _measurementTimer?.cancel();
+    if (_waveAnimationController.isAnimating) {
+      _waveAnimationController.stop(); // Freeze waveform graph when finished!
+    }
 
     final waveform = _ppgService.waveform;
     final fps = _ppgService.capturedFps;
@@ -313,6 +359,9 @@ class _ConditionMeasurementScreenState
   }
 
   void _applyResult(PpgMeasurementResult result) {
+    if (_waveAnimationController.isAnimating) {
+      _waveAnimationController.stop(); // Freeze waveform graph animation when finished
+    }
     _lastResult = result;
     _recommendedRoutine = BreathingRoutineModel.fromMeasurement(
       bpm: result.bpm,
@@ -327,13 +376,6 @@ class _ConditionMeasurementScreenState
   }
 
   void _showRetakePrompt(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.coralRed,
-        duration: const Duration(seconds: 4),
-      ),
-    );
     setState(() {
       _status = MeasurementStatus.waiting;
       _secondsLeft = 20;
@@ -343,130 +385,136 @@ class _ConditionMeasurementScreenState
     });
   }
 
-  void _resetToWaitingState() {
-    _measurementTimer?.cancel();
-    setState(() {
-      _status = MeasurementStatus.waiting;
-      _secondsLeft = 20;
-      _progress = 0.0;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.darkBg,
-      body: SafeArea(
-        child: ResponsiveContainer(
-          maxWidth: 600,
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Stack(
-            children: [
-              // Main Measurement Screen Body
-              Column(
-                children: [
-                  const SizedBox(height: 12),
-                  // Header Row: Back Arrow + Guide Icon
-                  _buildHeaderRow(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          if (_showQuitDialog) {
+            _resumeFromQuitConfirmation();
+          } else if (_showGuideSheet) {
+            _closeGuideSheet();
+          } else {
+            _showQuitConfirmation();
+          }
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.darkBg,
+        body: SafeArea(
+          child: ResponsiveContainer(
+            maxWidth: 600,
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: Stack(
+              children: [
+                // Main Measurement Screen Body
+                Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    // Header Row: Back Arrow + Guide Icon
+                    _buildHeaderRow(),
 
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.only(bottom: 24.0),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 10),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.only(bottom: 24.0),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 24),
 
-                          if (_status == MeasurementStatus.measuring && !_isFingerCovered) ...[
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: AppColors.coralRed.withAlpha(230),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.white, width: 1.2),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.warning_amber_rounded, color: Colors.white, size: 24),
-                                  SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      '손가락이 렌즈에서 떨어졌습니다!\n후면 카메라와 플래시에 손가락을 밀착해 주세요.',
-                                      style: TextStyle(
-                                        fontFamily: AppFonts.pretendard,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w400,
-                                        color: Colors.white,
-                                        height: 1.3,
+                            if (_status == MeasurementStatus.measuring && !_isFingerCovered) ...[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.coralRed.withAlpha(230),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: Colors.white, width: 1.2),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded, color: Colors.white, size: 24),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        '손가락이 렌즈에서 떨어졌습니다!\n후면 카메라와 플래시에 손가락을 밀착해 주세요.',
+                                        style: TextStyle(
+                                          fontFamily: AppFonts.pretendard,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w400,
+                                          color: Colors.white,
+                                          height: 1.3,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+
+                            // Center Timer Arc & Ring (20 sec / 7 sec left / 0 sec left)
+                            _buildTimerArcRing(),
+                            const SizedBox(height: 2),
+
+                            // Instruction Subtext (대기 중 vs 측정 중 vs 측정 완료)
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              child: Text(
+                                _getInstructionText(),
+                                key: ValueKey(_getInstructionText()),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontFamily: AppFonts.pretendard,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.lightGray,
+                                  height: 1.4,
+                                ),
                               ),
                             ),
+                            const SizedBox(height: 38),
+
+                            // Sensor Data Cards Row: HR & Signal
+                            _buildSensorCardsRow(),
+                            const SizedBox(height: 16),
+
+                            // Waveform Chart / Live PPG Waveform Box
+                            _buildWaveformGraphBox(),
+                            const SizedBox(height: 24),
+
+                            // Bottom Action Button (대기 중 / 측정 중... 67% / 측정 완료)
+                            _buildBottomActionButton(),
                             const SizedBox(height: 12),
-                          ],
 
-                          // Center Timer Arc & Ring (20 sec / 7 sec left / 0 sec left)
-                          _buildTimerArcRing(),
-                          const SizedBox(height: 16),
-
-                          // Instruction Subtext (대기 중 vs 측정 중 vs 측정 완료)
-                          Text(
-                            _getInstructionText(),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: AppFonts.pretendard,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.lightGray,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Sensor Data Cards Row: HR & Signal
-                          _buildSensorCardsRow(),
-                          const SizedBox(height: 16),
-
-                          // Waveform Chart / Live PPG Waveform Box
-                          _buildWaveformGraphBox(),
-                          const SizedBox(height: 24),
-
-                          // Bottom Action Button (대기 중 / 측정 중... 67% / 측정 완료)
-                          _buildBottomActionButton(),
-                          const SizedBox(height: 12),
-
-                          // Cancel Button
-                          TextButton(
-                            onPressed: () {
-                              if (_status != MeasurementStatus.waiting) {
-                                _resetToWaitingState();
-                              } else {
-                                Navigator.of(context).pop();
-                              }
-                            },
-                            child: const Text(
-                              '취소',
-                              style: TextStyle(
-                                fontFamily: AppFonts.pretendard,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w400,
-                                color: AppColors.slateGray,
+                            // Cancel Button
+                            TextButton(
+                              onPressed: _showQuitConfirmation,
+                              child: const Text(
+                                '취소',
+                                style: TextStyle(
+                                  fontFamily: AppFonts.pretendard,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.slateGray,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
 
-              // Preparation Guide Sheet Modal Overlay (컨디션 측정_측정 전)
-              if (_showGuideSheet) _buildPreparationGuideOverlay(),
-            ],
+                // Preparation Guide Sheet Modal Overlay (컨디션 측정_측정 전)
+                if (_showGuideSheet) _buildPreparationGuideOverlay(),
+
+                // Quit Confirmation Modal Overlay ("측정을 그만두시겠어요?")
+                if (_showQuitDialog) _buildQuitDialogOverlay(),
+              ],
+            ),
           ),
         ),
       ),
@@ -478,9 +526,14 @@ class _ConditionMeasurementScreenState
       case MeasurementStatus.waiting:
         return '카메라와 플래시 위에\n손가락을 가만히 올려주세요';
       case MeasurementStatus.measuring:
-        return _isFingerCovered
+        if (!_isFingerCovered) {
+          return '카메라와 플래시 위에\n손가락을 살포시 덮어주세요';
+        }
+        // 20초 측정 진행 중 3초 간격으로 2가지 안내 멘트 번갈아 표시!
+        final isMessageOne = ((20 - _secondsLeft) ~/ 3) % 2 == 0;
+        return isMessageOne
             ? '손을 떼지 말고\n그대로 유지해주세요'
-            : '카메라와 플래시 위에\n손가락을 살포시 덮어주세요';
+            : '의료적 진단이 아닌\n웰빙 참고용 정보예요';
       case MeasurementStatus.analyzing:
         return '측정한 파형을 분석하고 있어요\n잠시만 기다려주세요';
       case MeasurementStatus.completed:
@@ -494,9 +547,7 @@ class _ConditionMeasurementScreenState
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         IconButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
+          onPressed: _showQuitConfirmation,
           icon: const Icon(
             Icons.arrow_back_rounded,
             color: AppColors.white,
@@ -518,10 +569,15 @@ class _ConditionMeasurementScreenState
           ),
           child: IconButton(
             onPressed: _openGuideSheet,
-            icon: const Icon(
-              Icons.collections_bookmark_outlined,
-              color: AppColors.lightGray,
-              size: 20,
+            icon: Image.asset(
+              'assets/images/ic_guide.png',
+              width: 22,
+              height: 22,
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                Icons.collections_bookmark_outlined,
+                color: AppColors.lightGray,
+                size: 20,
+              ),
             ),
             padding: EdgeInsets.zero,
           ),
@@ -613,16 +669,16 @@ class _ConditionMeasurementScreenState
 
   /// 3. Sensor Cards Row: HR & Signal (Real BPM & Good)
   Widget _buildSensorCardsRow() {
-    final hasRealBpm = _status != MeasurementStatus.waiting &&
-        _isFingerCovered &&
-        _lastResult != null &&
-        _lastResult!.signalQuality == 'Good';
+    final showBpm = _lastResult != null &&
+        (_status == MeasurementStatus.completed ||
+            (!kIsWeb && _status == MeasurementStatus.measuring && _isFingerCovered));
 
-    final isMeasuring = _status != MeasurementStatus.waiting && _isFingerCovered;
+    final showSignal = _status == MeasurementStatus.completed ||
+        (!kIsWeb && _status == MeasurementStatus.measuring && _isFingerCovered);
 
     return Row(
       children: [
-        // HR Card (Real measured bpm only, -- when calibrating or detached)
+        // HR Card (Real measured bpm only, -- when waiting or in Web simulation)
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -637,10 +693,10 @@ class _ConditionMeasurementScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         Text(
                           'HR',
@@ -664,8 +720,8 @@ class _ConditionMeasurementScreenState
                       ],
                     ),
                     Icon(
-                      Icons.favorite_rounded,
-                      color: hasRealBpm ? AppColors.coralRed : AppColors.slateGray,
+                      Icons.favorite_outline_rounded,
+                      color: AppColors.slateGray,
                       size: 18,
                     ),
                   ],
@@ -676,10 +732,10 @@ class _ConditionMeasurementScreenState
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      hasRealBpm ? '${_lastResult!.bpm}' : '--',
+                      showBpm ? '${_lastResult!.bpm}' : '--',
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
-                        fontSize: 22,
+                        fontSize: 25,
                         fontWeight: FontWeight.w400,
                         color: AppColors.white,
                       ),
@@ -702,7 +758,7 @@ class _ConditionMeasurementScreenState
         ),
         const SizedBox(width: 12),
 
-        // Signal Card (Good when measuring or completed)
+        // Signal Card (- during Web simulation, Good during real App measurement / completion)
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -752,10 +808,10 @@ class _ConditionMeasurementScreenState
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  isMeasuring ? (hasRealBpm ? 'Good' : '측정 중') : '-',
+                  showSignal ? 'Good' : '-',
                   style: TextStyle(
                     fontFamily: AppFonts.pretendard,
-                    fontSize: hasRealBpm ? 22 : 16,
+                    fontSize: showSignal ? 25 : 18,
                     fontWeight: FontWeight.w400,
                     color: AppColors.white,
                   ),
@@ -875,31 +931,35 @@ class _ConditionMeasurementScreenState
   }
 
   /// 6. Preparation Guide Sheet Overlay (컨디션 측정_측정 전)
+  /// 6. Preparation Guide Sheet Overlay (컨디션 측정_측정 전)
   Widget _buildPreparationGuideOverlay() {
+    final mediaQuery = MediaQuery.of(context);
+    final cardHeight = (mediaQuery.size.height * 0.48).clamp(370.0, 410.0);
+
     return Positioned.fill(
       child: GestureDetector(
         onTap: _closeGuideSheet,
         child: Container(
           color: Colors.black.withAlpha(170),
           alignment: Alignment.bottomCenter,
+          padding: const EdgeInsets.only(left: 14.0, right: 14.0, bottom: 16.0),
           child: GestureDetector(
             onTap: () {}, // Prevent tap through
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: BorderRadius.circular(32),
               child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: 390,
+                  maxHeight: cardHeight,
+                ),
                 width: double.infinity,
-                height: 430,
-                margin: const EdgeInsets.only(left: 8, right: 8, bottom: 16),
+                height: cardHeight,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF27292D),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: AppColors.slateDarkGray.withAlpha(60),
-                    width: 1,
-                  ),
+                  color: const Color(0xFF26272B),
+                  borderRadius: BorderRadius.circular(32),
                   boxShadow: const [
                     BoxShadow(
-                      color: Color(0xB3000000), // Rich dark drop shadow
+                      color: Color(0x80000000), // Rich dark drop shadow
                       blurRadius: 36,
                       spreadRadius: 4,
                       offset: Offset(0, -6),
@@ -931,14 +991,14 @@ class _ConditionMeasurementScreenState
                           imagePath: 'assets/images/guide_3.png',
                           title: '20초 동안 손가락을\n고정하세요',
                           subtitle: '손가락이 이탈하거나 흔들리면\n측정에 중단될 수 있어요.',
-                          isScaledDown: true,
+                          useRightFlushFit: true,
                         ),
                       ],
                     ),
 
                     // 2. Fixed Top Header Title: "준비 방법" (Fixed at top center)
                     const Positioned(
-                      top: 22,
+                      top: 20,
                       left: 0,
                       right: 0,
                       child: Center(
@@ -946,7 +1006,7 @@ class _ConditionMeasurementScreenState
                           '준비 방법',
                           style: TextStyle(
                             fontFamily: AppFonts.pretendard,
-                            fontSize: 18,
+                            fontSize: 17,
                             fontWeight: FontWeight.w400,
                             color: AppColors.white,
                           ),
@@ -956,21 +1016,21 @@ class _ConditionMeasurementScreenState
 
                     // 3. Fixed Bottom Right: "건너뛰기" Button (Positioned at bottom right like screenshot)
                     Positioned(
-                      right: 24,
-                      bottom: 18,
+                      right: 20,
+                      bottom: 16,
                       child: InkWell(
                         onTap: _closeGuideSheet,
                         borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 4.0, horizontal: 6.0),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                              vertical: 4.0, horizontal: 8.0),
                           child: Text(
                             '건너뛰기',
                             style: TextStyle(
                               fontFamily: AppFonts.pretendard,
                               fontSize: 14,
                               fontWeight: FontWeight.w400,
-                              color: AppColors.white.withAlpha(140),
+                              color: Color(0xFF8A909E),
                             ),
                           ),
                         ),
@@ -986,66 +1046,238 @@ class _ConditionMeasurementScreenState
     );
   }
 
+  /// 7. Quit Confirmation Modal Overlay ("측정을 그만두시겠어요?")
+  Widget _buildQuitDialogOverlay() {
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: _resumeFromQuitConfirmation,
+        child: Container(
+          color: Colors.black.withAlpha(190),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: GestureDetector(
+            onTap: () {}, // Prevent tap through
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 360),
+                width: double.infinity,
+                padding: const EdgeInsets.only(top: 26, bottom: 22, left: 22, right: 22),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF26272B),
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x80000000),
+                      blurRadius: 36,
+                      spreadRadius: 4,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 1. Crystal 3-Blade Icon matching Image 2
+                    Image.asset(
+                      'assets/images/ic_restart_modal.png',
+                      width: 58,
+                      height: 58,
+                      errorBuilder: (context, error, stackTrace) => Image.asset(
+                        'assets/images/crystal_icon.png',
+                        width: 58,
+                        height: 58,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.restart_alt_rounded,
+                          color: Color(0xFFE2FBD7),
+                          size: 48,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 2. Title: "측정을 그만두시겠어요?"
+                    const Text(
+                      '측정을 그만두시겠어요?',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: AppFonts.pretendard,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.white,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // 3. Subtitle: "지금 멈추면 오늘의 컨디션을\n확인할 수 없어요."
+                    const Text(
+                      '지금 멈추면 오늘의 컨디션을\n확인할 수 없어요.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: AppFonts.pretendard,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF9EA3B0),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 26),
+
+                    // 4. Action Buttons Row: [그만두기] [측정하기]
+                    Row(
+                      children: [
+                        // Left Button: 그만두기 (Dark Pill)
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: InkWell(
+                              onTap: _quitAndExit,
+                              borderRadius: BorderRadius.circular(24),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2D2F33),
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  '그만두기',
+                                  style: TextStyle(
+                                    fontFamily: AppFonts.pretendard,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w400,
+                                    color: Color(0xFF8A909E),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+
+                        // Right Button: 측정하기 (Mint Green Pill)
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: InkWell(
+                              onTap: _resumeFromQuitConfirmation,
+                              borderRadius: BorderRadius.circular(24),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE2FBD7),
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  '측정하기',
+                                  style: TextStyle(
+                                    fontFamily: AppFonts.pretendard,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w400,
+                                    color: Color(0xFF1E221E),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildGuideSlide({
     required String imagePath,
     required String title,
     required String subtitle,
-    bool isScaledDown = false,
+    Alignment imageAlignment = Alignment.center,
+    double scale = 1.0,
+    bool useRightFlushFit = false,
   }) {
     return Stack(
       fit: StackFit.expand,
       children: [
         // Solid Dark Grey Base Color matching attached screenshot
         Container(
-          color: const Color(0xFF27292D),
+          color: const Color(0xFF26272B),
         ),
 
         // Background Guide Image
-        Transform.scale(
-          scale: isScaledDown ? 0.85 : 1.0,
-          child: Image.asset(
-            imagePath,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: const Color(0xFF27292D),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.camera_alt_outlined,
-                  color: Colors.white.withAlpha(60),
-                  size: 64,
-                ),
-              );
-            },
+        if (useRightFlushFit)
+          Positioned(
+            top: 20,
+            bottom: 40,
+            right: 0,
+            child: Image.asset(
+              imagePath,
+              fit: BoxFit.contain,
+              alignment: Alignment.centerRight,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: const Color(0xFF26272B),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.camera_alt_outlined,
+                    color: Colors.white.withAlpha(60),
+                    size: 64,
+                  ),
+                );
+              },
+            ),
+          )
+        else
+          Transform.scale(
+            scale: scale,
+            alignment: imageAlignment,
+            child: Image.asset(
+              imagePath,
+              fit: BoxFit.cover,
+              alignment: imageAlignment,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: const Color(0xFF26272B),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.camera_alt_outlined,
+                    color: Colors.white.withAlpha(60),
+                    size: 64,
+                  ),
+                );
+              },
+            ),
           ),
-        ),
 
         // Grey Vignette Gradient Overlay (Matching attached screenshot)
         Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                const Color(0xFF27292D).withAlpha(180),
-                Colors.transparent,
-                const Color(0xFF27292D).withAlpha(170),
-                const Color(0xFF27292D).withAlpha(235),
+                Color(0xCC26272B),
+                Color(0x1A26272B),
+                Color(0xCD26272B),
+                Color(0xFF26272B),
               ],
-              stops: const [0.0, 0.28, 0.60, 1.0],
+              stops: [0.0, 0.30, 0.65, 1.0],
             ),
           ),
         ),
 
-        // Text & Dots Content Overlay vertically centered over the middle of the photo!
+        // Text & Dots Content Overlay (Pulled up higher by increasing bottom padding)
         Positioned.fill(
           child: Padding(
-            padding: const EdgeInsets.only(top: 50, bottom: 20, left: 24, right: 24),
+            padding: const EdgeInsets.only(top: 50, bottom: 44, left: 20, right: 20),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const SizedBox(height: 32),
-
                 // Title: 손끝으로 카메라와 플래시를 완전히 덮어주세요
                 Text(
                   title,
@@ -1055,24 +1287,24 @@ class _ConditionMeasurementScreenState
                     fontSize: 18,
                     fontWeight: FontWeight.w400,
                     color: AppColors.white,
-                    height: 1.35,
+                    height: 1.25,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 // Subtitle: 검지 또는 중지 손가락 끝으로 렌즈 전체를 부드럽게 덮어주세요.
                 Text(
                   subtitle,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w400,
-                    color: AppColors.white.withAlpha(185),
-                    height: 1.45,
+                    color: Color(0xFF9EA3B0),
+                    height: 1.35,
                   ),
                 ),
-                const SizedBox(height: 26),
+                const SizedBox(height: 16),
 
                 // 3 Page Dots Indicator centered horizontally below subtitle!
                 Row(
@@ -1089,23 +1321,23 @@ class _ConditionMeasurementScreenState
                       },
                       behavior: HitTestBehavior.opaque,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4.0, vertical: 4.0),
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-                          width: isSelected ? 8 : 6,
-                          height: isSelected ? 8 : 6,
+                          width: 7,
+                          height: 7,
                           decoration: BoxDecoration(
+                            shape: BoxShape.circle,
                             color: isSelected
                                 ? AppColors.white
-                                : AppColors.white.withAlpha(90),
-                            shape: BoxShape.circle,
+                                : const Color(0xFF555964),
                           ),
                         ),
                       ),
                     );
                   }),
                 ),
+                const SizedBox(height: 10),
               ],
             ),
           ),

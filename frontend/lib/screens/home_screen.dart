@@ -5,7 +5,6 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
 import '../widgets/bpace_logo.dart';
-import 'splash_screen.dart';
 import 'log_screen.dart';
 import 'condition_measurement_screen.dart';
 import 'recommended_breathing_screen.dart';
@@ -48,7 +47,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final loaded = await ScheduleStorageService.loadSchedules();
     if (mounted) {
       setState(() {
-        _homeSchedules = loaded;
+        // 홈 화면 '오늘의 일정' 카드는 준비완료(리추얼 완료)된 일정은 제외하고 미완료된 예정 일정만 표시
+        _homeSchedules = loaded.where((s) => s['isCompleted'] != true).toList();
       });
     }
   }
@@ -79,30 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String get _todayDateString {
     final now = DateTime.now();
     return '${now.year}년 ${now.month}월 ${now.day}일';
-  }
-
-  Future<void> _resetOnboarding() async {
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('has_seen_onboarding');
-
-    if (!mounted) return;
-
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('온보딩 상태가 초기화되었습니다. 스플래쉬 화면으로 이동합니다.'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-
-    navigator.pushReplacement(
-      MaterialPageRoute(builder: (context) => const SplashScreen()),
-    );
   }
 
   @override
@@ -176,23 +152,6 @@ class _HomeScreenState extends State<HomeScreen> {
         // Today's Schedule Section
         _buildScheduleSection(),
         const SizedBox(height: 16),
-
-        // Reset Onboarding Dev Helper
-        Center(
-          child: TextButton.icon(
-            onPressed: _resetOnboarding,
-            icon: const Icon(Icons.refresh, color: AppColors.slateGray, size: 16),
-            label: const Text(
-              '테스트용: 온보딩 초기화 후 다시보기',
-              style: TextStyle(
-                fontFamily: AppFonts.pretendard,
-                fontSize: 12,
-                color: AppColors.slateGray,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -660,10 +619,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTapPrepare: isCompleted
                     ? null
                     : () {
+                        final id = (schedule['id'] as String?) ?? title;
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => ConditionMeasurementScreen(
-                              scheduleTitle: title,
+                              scheduleTitle: id,
                             ),
                           ),
                         ).then((_) => _loadHomeSchedules());

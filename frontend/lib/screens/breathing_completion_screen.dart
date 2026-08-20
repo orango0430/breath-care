@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
+import '../utils/schedule_storage_service.dart';
 import 'breathing_exercise_screen.dart';
 
 /// Breathing Completion Screen (Ritual Feedback - 스크롤 가능한 호흡 종료 피드백 화면)
@@ -13,6 +14,7 @@ class BreathingCompletionScreen extends StatefulWidget {
   final String durationString;
   final int cycleCount;
   final String hrvChange;
+  final String? targetScheduleId;
 
   const BreathingCompletionScreen({
     super.key,
@@ -21,6 +23,7 @@ class BreathingCompletionScreen extends StatefulWidget {
     this.durationString = '05:04',
     this.cycleCount = 1,
     this.hrvChange = '-8 bpm',
+    this.targetScheduleId,
   });
 
   @override
@@ -36,6 +39,9 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
   void initState() {
     super.initState();
     _loadBookmarkStatus();
+    if (widget.targetScheduleId != null && widget.targetScheduleId!.isNotEmpty) {
+      ScheduleStorageService.completeSchedule(widget.targetScheduleId);
+    }
   }
 
   String _getRoutineIdByTitle(String title) {
@@ -65,13 +71,6 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
     setState(() {
       _isSaved = true;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Ritual 기록이 성공적으로 저장되었습니다!'),
-        backgroundColor: AppColors.lightMint,
-        duration: Duration(seconds: 2),
-      ),
-    );
   }
 
   @override

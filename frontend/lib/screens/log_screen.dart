@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_client.dart';
-import '../services/api_exception.dart';
 import '../services/calendar_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
@@ -109,39 +108,42 @@ class _LogScreenState extends State<LogScreen> {
     super.initState();
     final now = DateTime.now();
     _selectedSubTab = widget.initialSubTab;
-    _selectedDate = _today;
+    _selectedDate = DateTime(now.year, now.month, now.day);
+    _currentDisplayMonth = DateTime(now.year, now.month, 1);
     _loadSchedules();
+    _loadConditionScores();
   }
 
-  /// Fetches the displayed month. The server treats `to` as exclusive, so the
-  /// first day of the next month is the right upper bound.
+  /// Loads schedules from local storage (ScheduleStorageService) and server events.
   Future<void> _loadSchedules() async {
-    if (!ApiClient.instance.isLoggedIn) {
-      // Guests have no schedules by design — nothing is stored for them.
-      setState(() => _schedules = []);
-      return;
-    }
-
     setState(() => _isLoadingSchedules = true);
-    final month = DateTime(_currentDisplayMonth.year, _currentDisplayMonth.month, 1);
 
-    try {
-      final events = await CalendarService.instance.events(
-        from: month,
-        to: DateTime(month.year, month.month + 1, 1),
-      );
-      if (!mounted) return;
-      setState(() {
-        _schedules = events.map(_toRow).toList();
-        _isLoadingSchedules = false;
-      });
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoadingSchedules = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: AppColors.coralRed),
-      );
+    // 1. Always load local schedules (works in both Guest & Logged-in modes)
+    final localSchedules = await ScheduleStorageService.loadSchedules();
+    final List<Map<String, dynamic>> combined = List.from(localSchedules);
+
+    // 2. If logged in, fetch server events and merge
+    if (ApiClient.instance.isLoggedIn) {
+      final month = DateTime(_currentDisplayMonth.year, _currentDisplayMonth.month, 1);
+      try {
+        final events = await CalendarService.instance.events(
+          from: month,
+          to: DateTime(month.year, month.month + 1, 1),
+        );
+        final serverRows = events.map(_toRow).toList();
+        for (var serverRow in serverRows) {
+          if (!combined.any((s) => s['id'] == serverRow['id'] || s['title'] == serverRow['title'])) {
+            combined.add(serverRow);
+          }
+        }
+      } catch (_) {}
     }
+
+    if (!mounted) return;
+    setState(() {
+      _schedules = combined;
+      _isLoadingSchedules = false;
+    });
   }
 
   Map<String, dynamic> _toRow(CalendarEvent event) => {
@@ -158,22 +160,6 @@ class _LogScreenState extends State<LogScreen> {
     final period = at.hour < 12 ? '오전' : '오후';
     final hour = at.hour == 0 ? 12 : (at.hour > 12 ? at.hour - 12 : at.hour);
     return '$period $hour:${at.minute.toString().padLeft(2, '0')}';
-=======
-    _selectedDate = DateTime(now.year, now.month, now.day);
-    _currentDisplayMonth = DateTime(now.year, now.month, 1);
-
-    _loadSchedules();
-    _loadConditionScores();
-  }
-
-  Future<void> _loadSchedules() async {
-    final loaded = await ScheduleStorageService.loadSchedules();
-    if (mounted) {
-      setState(() {
-        _schedules.clear();
-        _schedules.addAll(loaded);
-      });
-    }
   }
 
   Future<void> _loadConditionScores() async {
@@ -220,7 +206,6 @@ class _LogScreenState extends State<LogScreen> {
         });
       }
     }
->>>>>>> cc8162f (feat: 하드코딩 데이터 실기능 연동 및 UI 스타일 정돈)
   }
 
   void _onBottomNavTap(int index) {
@@ -466,10 +451,6 @@ class _LogScreenState extends State<LogScreen> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
               GestureDetector(
                 onTap: () {
                   setState(() {
@@ -486,25 +467,22 @@ class _LogScreenState extends State<LogScreen> {
                     letterSpacing: 0.3,
                   ),
                 ),
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _currentDisplayMonth = DateTime(
-                        _currentDisplayMonth.year,
-                        _currentDisplayMonth.month + 1,
-                        1,
-                      );
-                    });
-                    _loadSchedules();
-                  },
-                  icon: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF90939A),
-                    size: 22,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    _currentDisplayMonth = DateTime(
+                      _currentDisplayMonth.year,
+                      _currentDisplayMonth.month + 1,
+                      1,
+                    );
+                  });
+                  _loadSchedules();
+                },
+                icon: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF90939A),
+                  size: 22,
                 ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -725,7 +703,6 @@ class _LogScreenState extends State<LogScreen> {
                     });
                     _loadSchedules();
                   },
-                  },
                 );
               },
               borderRadius: BorderRadius.circular(6),
@@ -824,6 +801,29 @@ class _LogScreenState extends State<LogScreen> {
               ),
             );
           }),
+
+        const SizedBox(height: 20),
+
+        // Google Calendar Sync Link Button (Google Calendar 연동)
+        Center(
+          child: GestureDetector(
+            onTap: () {
+              // Silent placeholder for future Google Calendar OAuth API sync
+            },
+            child: const Text(
+              'Google Calendar 연동',
+              style: TextStyle(
+                fontFamily: AppFonts.pretendard,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: Color(0xFF90939A),
+                decoration: TextDecoration.underline,
+                decorationColor: Color(0xFF90939A),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -887,10 +887,11 @@ class _LogScreenState extends State<LogScreen> {
               onPressed: isCompleted
                   ? null
                   : () {
+                      final id = (schedule['id'] as String?) ?? (schedule['title'] as String?);
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => ConditionMeasurementScreen(
-                            scheduleTitle: schedule['title'] as String?,
+                            scheduleTitle: id,
                           ),
                         ),
                       ).then((_) {
@@ -1002,15 +1003,6 @@ class _LogScreenState extends State<LogScreen> {
                         updatedSchedule,
                       );
                       _loadSchedules();
-                      if (mounted) {
-                        ScaffoldMessenger.of(this.context).showSnackBar(
-                          const SnackBar(
-                            content: Text('일정이 수정되었습니다.'),
-                            duration: Duration(seconds: 2),
-                            backgroundColor: Color(0xFF2E3034),
-                          ),
-                        );
-                      }
                     },
                   );
                 },
@@ -1089,13 +1081,6 @@ class _LogScreenState extends State<LogScreen> {
                 _loadSchedules();
                 if (context.mounted) {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('일정이 삭제되었습니다.'),
-                      duration: Duration(seconds: 2),
-                      backgroundColor: AppColors.coralRed,
-                    ),
-                  );
                 }
               },
               child: const Text('삭제', style: TextStyle(color: AppColors.coralRed, fontWeight: FontWeight.w400)),

@@ -24,6 +24,7 @@ class BreathingExerciseScreen extends StatefulWidget {
   final double? targetExhaleSec;
   final double? targetHold2Sec;
   final bool isAdaptiveRamp;
+  final String? targetScheduleId;
 
   const BreathingExerciseScreen({
     super.key,
@@ -40,6 +41,7 @@ class BreathingExerciseScreen extends StatefulWidget {
     this.targetExhaleSec,
     this.targetHold2Sec,
     this.isAdaptiveRamp = false,
+    this.targetScheduleId,
   });
 
   @override
@@ -134,9 +136,9 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     _startTimer();
     _initAudioPlayer();
 
-    // 3초간 유지 후 1초간 부드럽게 스르륵 투명해져 사라지는 Fade-Out 팝업 오버레이
+    // 5초간 유지 후 1초간 부드럽게 스르륵 투명해져 사라지는 Fade-Out 팝업 오버레이
     if (widget.isAdaptiveRamp) {
-      _overlayTimer = Timer(const Duration(milliseconds: 2800), () {
+      _overlayTimer = Timer(const Duration(seconds: 5), () {
         if (!mounted) return;
         setState(() {
           _overlayOpacity = 0.0;
@@ -253,6 +255,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
           durationString: _formattedTime,
           cycleCount: currentCycle,
           hrvChange: '$averageHrvBpmChange bpm',
+          targetScheduleId: widget.targetScheduleId,
         ),
       ),
     );
@@ -670,25 +673,14 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.auto_awesome_rounded,
-                                color: AppColors.lightMint,
-                                size: 20,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                '맞춤 호흡 조율 시작',
-                                style: TextStyle(
-                                  fontFamily: AppFonts.pretendard,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w400,
-                                  color: AppColors.lightMint,
-                                ),
-                              ),
-                            ],
+                          const Text(
+                            '나만의 맞춤 호흡 시작',
+                            style: TextStyle(
+                              fontFamily: AppFonts.pretendard,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.lightMint,
+                            ),
                           ),
                           const SizedBox(height: 10),
                           Text(
