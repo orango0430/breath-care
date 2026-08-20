@@ -88,38 +88,46 @@ public class PpgSignalProcessor implements SignalProcessor {
     public SignalResult process(double[] samples, int fps) {
         if (samples == null
                 || samples.length < (long) fps * MIN_DURATION_SEC * DURATION_TOLERANCE) {
-            return SignalResult.poor();
+            return SignalResult.poor("길이부족 n=%d".formatted(samples == null ? 0 : samples.length));
         }
 
         double[] filtered = bandpass(samples, fps);
-        if (!hasPulse(samples, filtered)) {
-            return SignalResult.poor();
+        double perfusion = perfusion(samples, filtered);
+        if (perfusion < MIN_PERFUSION) {
+            return SignalResult.poor("관류부족 %.5f".formatted(perfusion));
         }
 
         double[] intervals = intervalsMs(detectPeaks(filtered, fps), fps);
         if (intervals.length < MIN_INTERVALS) {
-            return SignalResult.poor();
+            return SignalResult.poor(
+                    "피크부족 %d개 관류=%.5f".formatted(intervals.length + 1, perfusion));
         }
 
         boolean[] kept = markUsable(intervals);
         int keptCount = countTrue(kept);
         if (keptCount < MIN_INTERVALS) {
-            return SignalResult.poor();
+            return SignalResult.poor("간격이상 %d/%d 남음 중앙값=%.0fms"
+                    .formatted(keptCount, intervals.length, median(intervals)));
         }
 
         double meanRr = mean(intervals, kept);
         double hr = 60_000.0 / meanRr;
         if (hr < MIN_BPM || hr > MAX_BPM) {
-            return SignalResult.poor();
+            return SignalResult.poor("심박이상 %.0fbpm".formatted(hr));
         }
 
         double rejectRatio = 1.0 - ((double) keptCount / intervals.length);
+        MeasurementQuality quality = judge(rejectRatio);
 
         return new SignalResult(
                 round(hr),
                 round(rmssd(intervals, kept)),
                 round(sdnn(intervals, kept, meanRr)),
-                judge(rejectRatio));
+                quality,
+                quality == MeasurementQuality.POOR
+                        ? "간격흔들림 %.0f%% 버림 (%d/%d)"
+                                .formatted(rejectRatio * 100, keptCount, intervals.length)
+                        : "");
     }
 
     // ------------------------------------------------------------------
@@ -167,13 +175,16 @@ public class PpgSignalProcessor implements SignalProcessor {
     // 2. 관류 확인
     // ------------------------------------------------------------------
 
-    /** 맥동 성분이 밝기 대비 너무 작으면 손가락이 렌즈를 덮지 않은 것이다. */
-    private boolean hasPulse(double[] samples, double[] filtered) {
+    /**
+     * 관류 지수 — 맥동 성분이 밝기 대비 얼마나 되는가.
+     *
+     * <p>너무 작으면 손가락이 렌즈를 덮지 않았거나, 덮었는데 센서가 포화돼 맥동이
+     * 잘려 나간 것이다. 판정만 하지 않고 값을 돌려주는 이유는, 거부됐을 때 이 숫자가
+     * 얼마였는지가 다음에 무엇을 고칠지 알려주기 때문이다.
+     */
+    private double perfusion(double[] samples, double[] filtered) {
         double dc = mean(samples);
-        if (dc <= 0) {
-            return false;
-        }
-        return rms(filtered) / dc >= MIN_PERFUSION;
+        return dc <= 0 ? 0 : rms(filtered) / dc;
     }
 
     // ------------------------------------------------------------------

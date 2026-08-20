@@ -85,8 +85,11 @@ public class MeasurementService {
 
         SignalResult result = signalProcessor.process(toArray(samples), fps);
         if (!result.isUsable()) {
-            rejectedSignalRecorder.record(userId, fps, durationSec, samples, "POOR_QUALITY");
-            throw new BusinessException(ErrorCode.POOR_SIGNAL_QUALITY);
+            rejectedSignalRecorder.record(userId, fps, durationSec, samples, result.note());
+            // 사유를 그대로 내보낸다. 폰에는 붙일 디버거가 없어서, 이 줄이 아니면
+            // 어느 단계에서 걸렸는지 알 방법이 없다. 파형 값 자체는 담기지 않는다.
+            throw new BusinessException(ErrorCode.POOR_SIGNAL_QUALITY,
+                    "신호 품질이 낮습니다. 다시 측정해 주세요. (%s)".formatted(result.note()));
         }
 
         return result;

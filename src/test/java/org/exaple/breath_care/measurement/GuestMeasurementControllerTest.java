@@ -158,7 +158,9 @@ class GuestMeasurementControllerTest {
 
         RejectedSignal recorded = kept.get(kept.size() - 1);
         assertThat(recorded.getUserId()).isNull();
-        assertThat(recorded.getReason()).isEqualTo("POOR_QUALITY");
+        // 평평한 신호는 관류 확인에서 걸린다. 사유가 그 단계를 가리켜야 한다 —
+        // 어느 단계였는지 모르면 파형만 남아도 어디부터 봐야 할지 알 수 없다.
+        assertThat(recorded.getReason()).startsWith("관류부족");
         assertThat(recorded.getSampleCount()).isEqualTo(60 * 30);
         assertThat(recorded.getSamples()).isNotBlank();
 

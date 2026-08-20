@@ -42,11 +42,22 @@ public class RejectedSignalRecorder {
 
         try {
             repository.save(new RejectedSignal(
-                    userId, fps, durationSec, samples.size(), reason, join(samples)));
+                    userId, fps, durationSec, samples.size(), fitColumn(reason), join(samples)));
         } catch (RuntimeException e) {
             // 기록에 실패했다고 사용자 응답까지 바꾸지는 않는다. 어차피 재측정 안내가 나간다.
             log.warn("거부된 파형을 남기지 못했습니다: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 사유가 컬럼(40자)보다 길어도 기록 자체가 실패하지는 않게 자른다.
+     * 사유는 진단용 부가정보라, 이것 때문에 파형을 통째로 잃는 쪽이 더 손해다.
+     */
+    private String fitColumn(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return "UNKNOWN";
+        }
+        return reason.length() <= 40 ? reason : reason.substring(0, 40);
     }
 
     private String join(List<Double> samples) {
