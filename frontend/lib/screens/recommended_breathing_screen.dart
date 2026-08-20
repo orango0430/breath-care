@@ -1,8 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
-import '../utils/responsive.dart';
 import '../widgets/bpace_logo.dart';
 import 'breathing_exercise_screen.dart';
 import 'my_page_screen.dart';
@@ -27,14 +28,142 @@ class RitualCardItem {
     required this.description,
     required this.category,
     required this.imagePath,
-    this.isBookmarked = true,
+    this.isBookmarked = false,
     this.inhaleSec = 4.0,
     this.inhale2Sec = 0.0,
     this.holdSec = 7.0,
     this.exhaleSec = 8.0,
     this.hold2Sec = 0.0,
   });
+
+  RitualCardItem copyWith({
+    bool? isBookmarked,
+  }) {
+    return RitualCardItem(
+      id: id,
+      title: title,
+      description: description,
+      category: category,
+      imagePath: imagePath,
+      isBookmarked: isBookmarked ?? this.isBookmarked,
+      inhaleSec: inhaleSec,
+      inhale2Sec: inhale2Sec,
+      holdSec: holdSec,
+      exhaleSec: exhaleSec,
+      hold2Sec: hold2Sec,
+    );
+  }
 }
+
+/// Initial Master Data for Ritual Cards (in user requested order & 5 categories)
+const List<RitualCardItem> _rawRitualItems = [
+  // 1. 진정
+  RitualCardItem(
+    id: '1',
+    title: '생리학적 한숨',
+    description: '벅찬 긴장을 빠르게 내려놓는 호흡',
+    category: '진정',
+    imagePath: 'assets/images/bg_breath_sigh.png',
+    isBookmarked: false,
+    inhaleSec: 2.0,
+    inhale2Sec: 1.0,
+    holdSec: 0.0,
+    exhaleSec: 6.0,
+    hold2Sec: 0.0,
+  ),
+
+  // 2~3. 이완
+  RitualCardItem(
+    id: '2',
+    title: '4-7-8 호흡',
+    description: '긴장을 천천히 가라앉히는 호흡',
+    category: '이완',
+    imagePath: 'assets/images/bg_breath_478.png',
+    isBookmarked: false,
+    inhaleSec: 4.0,
+    inhale2Sec: 0.0,
+    holdSec: 7.0,
+    exhaleSec: 8.0,
+    hold2Sec: 0.0,
+  ),
+  RitualCardItem(
+    id: '3',
+    title: '4-6 릴랙스 호흡',
+    description: '일상의 긴장을 부드럽게 풀어주는 호흡',
+    category: '이완',
+    imagePath: 'assets/images/bg_breath_46_relax.png',
+    isBookmarked: false,
+    inhaleSec: 4.0,
+    holdSec: 0.0,
+    exhaleSec: 6.0,
+  ),
+
+  // 4~5. 집중
+  RitualCardItem(
+    id: '4',
+    title: '4-4-4-4 박스 호흡',
+    description: '흐트러진 마음을 차분히 집중시키는 호흡',
+    category: '집중',
+    imagePath: 'assets/images/bg_breath_box_4444.png',
+    isBookmarked: false,
+    inhaleSec: 4.0,
+    inhale2Sec: 0.0,
+    holdSec: 4.0,
+    exhaleSec: 4.0,
+    hold2Sec: 4.0,
+  ),
+  RitualCardItem(
+    id: '5',
+    title: '4-2-4-2 세미 박스 호흡',
+    description: '부담 없이 집중력을 되찾는 호흡',
+    category: '집중',
+    imagePath: 'assets/images/bg_breath_semi_box.png',
+    isBookmarked: false,
+    inhaleSec: 4.0,
+    holdSec: 2.0,
+    exhaleSec: 4.0,
+    hold2Sec: 2.0,
+  ),
+
+  // 6~7. 회복
+  RitualCardItem(
+    id: '6',
+    title: '5-5 공진 호흡',
+    description: '호흡의 균형을 찾아 편안해지는 호흡',
+    category: '회복',
+    imagePath: 'assets/images/bg_breath_resonance.png',
+    isBookmarked: false,
+    inhaleSec: 5.0,
+    inhale2Sec: 0.0,
+    holdSec: 0.0,
+    exhaleSec: 5.0,
+    hold2Sec: 0.0,
+  ),
+  RitualCardItem(
+    id: '7',
+    title: '2-1-4-1 횡격막 복식호흡',
+    description: '지친 몸을 깊고 편안하게 이완하는 호흡',
+    category: '회복',
+    imagePath: 'assets/images/bg_breath_diaphragmatic.png',
+    isBookmarked: false,
+    inhaleSec: 2.0,
+    holdSec: 1.0,
+    exhaleSec: 4.0,
+  ),
+
+  // 8. 각성
+  RitualCardItem(
+    id: '8',
+    title: '4-1-2-1 각성 호흡',
+    description: '잠든 몸과 정신을 가볍게 깨우는 호흡',
+    category: '각성',
+    imagePath: 'assets/images/bg_breath_awakening.png',
+    isBookmarked: false,
+    inhaleSec: 4.0,
+    holdSec: 1.0,
+    exhaleSec: 2.0,
+  ),
+];
 
 /// Recommended Breathing Screen (새로운 추천 Ritual 호흡 메인 화면)
 class RecommendedBreathingScreen extends StatefulWidget {
@@ -48,109 +177,85 @@ class RecommendedBreathingScreen extends StatefulWidget {
 class _RecommendedBreathingScreenState
     extends State<RecommendedBreathingScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final PageController _pageController = PageController(viewportFraction: 0.78);
+  final PageController _pageController =
+      PageController(viewportFraction: 0.83, initialPage: 1002);
+  String _searchQuery = '';
 
   int _selectedCategoryIndex = 0;
-  final List<String> _categories = ['발표', '시험', '면접'];
+  final List<String> _categories = ['전체', '진정', '이완', '집중', '회복', '각성'];
 
-  final List<RitualCardItem> _ritualItems = const [
-    RitualCardItem(
-      id: '1',
-      title: '4-7-8 호흡',
-      description: '긴장을 천천히 가라앉히는 호흡',
-      category: '발표',
-      imagePath: 'assets/images/bg_breath_478.png',
-      isBookmarked: true,
-      inhaleSec: 4.0,
-      inhale2Sec: 0.0,
-      holdSec: 7.0,
-      exhaleSec: 8.0,
-      hold2Sec: 0.0,
-    ),
-    RitualCardItem(
-      id: '2',
-      title: '4-4-4-4 박스 호흡',
-      description: '몰입 및 집중력 극대화 호흡',
-      category: '시험',
-      imagePath: 'assets/images/bg_breath_box_4444.png',
-      isBookmarked: true,
-      inhaleSec: 4.0,
-      inhale2Sec: 0.0,
-      holdSec: 4.0,
-      exhaleSec: 4.0,
-      hold2Sec: 4.0,
-    ),
-    RitualCardItem(
-      id: '3',
-      title: '5-5 공진 호흡',
-      description: '자율신경 균형 및 HRV 수치 극대화',
-      category: '면접',
-      imagePath: 'assets/images/bg_breath_resonance.png',
-      isBookmarked: true,
-      inhaleSec: 5.0,
-      inhale2Sec: 0.0,
-      holdSec: 0.0,
-      exhaleSec: 5.0,
-      hold2Sec: 0.0,
-    ),
-    RitualCardItem(
-      id: '4',
-      title: '생리학적 한숨',
-      description: '들숨 2초 + 추가들숨 1초 - 날숨 6초',
-      category: '발표',
-      imagePath: 'assets/images/bg_breath_sigh.png',
-      isBookmarked: false,
-      inhaleSec: 2.0,
-      inhale2Sec: 1.0,
-      holdSec: 0.0,
-      exhaleSec: 6.0,
-      hold2Sec: 0.0,
-    ),
-    RitualCardItem(
-      id: '5',
-      title: '4-6 릴랙스 호흡',
-      description: '초보자 맞춤형 마일드 이완 및 안정을 도움',
-      category: '면접',
-      imagePath: 'assets/images/bg_breath_46_relax.png',
-      isBookmarked: false,
-      inhaleSec: 4.0,
-      holdSec: 0.0,
-      exhaleSec: 6.0,
-    ),
-    RitualCardItem(
-      id: '6',
-      title: '4-2-4-2 세미 박스 호흡',
-      description: '저부담 인지 조절 및 일상 루틴 유지',
-      category: '시험',
-      imagePath: 'assets/images/bg_breath_semi_box.png',
-      isBookmarked: false,
-      inhaleSec: 4.0,
-      holdSec: 2.0,
-      exhaleSec: 4.0,
-    ),
-    RitualCardItem(
-      id: '7',
-      title: '2-1-4-1 횡격막 복식호흡',
-      description: '횡격막 가동 및 복부 내장기 긴장 해소',
-      category: '발표',
-      imagePath: 'assets/images/bg_breath_diaphragmatic.png',
-      isBookmarked: false,
-      inhaleSec: 2.0,
-      holdSec: 1.0,
-      exhaleSec: 4.0,
-    ),
-    RitualCardItem(
-      id: '8',
-      title: '4-1-2-1 각성 호흡',
-      description: '혈류 산소 순환 촉진 및 두뇌 에너징',
-      category: '시험',
-      imagePath: 'assets/images/bg_breath_awakening.png',
-      isBookmarked: false,
-      inhaleSec: 4.0,
-      holdSec: 1.0,
-      exhaleSec: 2.0,
-    ),
-  ];
+  List<RitualCardItem> get _filteredRitualItems {
+    List<RitualCardItem> items = _ritualItems;
+
+    // 1. 카테고리 필터링 (전체가 아닐 경우)
+    if (_selectedCategoryIndex != 0) {
+      final cat = _categories[_selectedCategoryIndex];
+      items = items.where((item) => item.category == cat).toList();
+    }
+
+    // 2. 검색어 필터링 (제목, 한 줄 설명, 카테고리 텍스트 매칭)
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      items = items.where((item) {
+        final titleMatch = item.title.toLowerCase().contains(q);
+        final descMatch = item.description.toLowerCase().contains(q);
+        final catMatch = item.category.toLowerCase().contains(q);
+        return titleMatch || descMatch || catMatch;
+      }).toList();
+    }
+
+    return items;
+  }
+
+  late List<RitualCardItem> _ritualItems;
+
+  @override
+  void initState() {
+    super.initState();
+    _ritualItems = List.from(_rawRitualItems);
+    _loadBookmarkedState();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.trim();
+    });
+  }
+
+  Future<void> _loadBookmarkedState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bookmarkedIds = prefs.getStringList('bookmarked_ritual_ids') ?? [];
+    if (bookmarkedIds.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _ritualItems = _rawRitualItems.map((item) {
+            return item.copyWith(
+              isBookmarked: bookmarkedIds.contains(item.id),
+            );
+          }).toList();
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleBookmark(String id) async {
+    setState(() {
+      final index = _ritualItems.indexWhere((item) => item.id == id);
+      if (index != -1) {
+        _ritualItems[index] = _ritualItems[index].copyWith(
+          isBookmarked: !_ritualItems[index].isBookmarked,
+        );
+      }
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    final bookmarkedIds = _ritualItems
+        .where((item) => item.isBookmarked)
+        .map((item) => item.id)
+        .toList();
+    await prefs.setStringList('bookmarked_ritual_ids', bookmarkedIds);
+  }
 
   @override
   void dispose() {
@@ -159,53 +264,7 @@ class _RecommendedBreathingScreenState
     super.dispose();
   }
 
-  void _addCustomCategory() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final categoryController = TextEditingController();
-        return AlertDialog(
-          backgroundColor: AppColors.darkCharcoal,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text(
-            '새 카테고리 추가',
-            style: TextStyle(
-              fontFamily: AppFonts.pretendard,
-              fontSize: 16,
-              color: AppColors.white,
-            ),
-          ),
-          content: TextField(
-            controller: categoryController,
-            style: const TextStyle(color: AppColors.white),
-            decoration: const InputDecoration(
-              hintText: '카테고리명 입력 (예: 면접)',
-              hintStyle: TextStyle(color: AppColors.slateGray),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('취소', style: TextStyle(color: AppColors.slateGray)),
-            ),
-            TextButton(
-              onPressed: () {
-                final text = categoryController.text.trim();
-                if (text.isNotEmpty) {
-                  setState(() {
-                    _categories.add(text);
-                    _selectedCategoryIndex = _categories.length - 1;
-                  });
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('추가', style: TextStyle(color: AppColors.lightMint)),
-            ),
-          ],
-        );
-      },
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -216,14 +275,14 @@ class _RecommendedBreathingScreenState
         _buildHeader(context),
         const SizedBox(height: 18),
 
-        // 2. Main Title: Time For \n Your Ritual (Identical to Home & Log screens)
+        // 2. Main Title
         Text(
           'Time For\nYour Ritual',
           style: GoogleFonts.outfit(
-            fontSize: 32,
+            fontSize: 38,
             fontWeight: FontWeight.w400,
             color: AppColors.white,
-            height: 1.18,
+            height: 1.14,
             letterSpacing: 0.2,
           ),
         ),
@@ -239,7 +298,7 @@ class _RecommendedBreathingScreenState
           style: TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 17,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             color: AppColors.white,
           ),
         ),
@@ -249,34 +308,64 @@ class _RecommendedBreathingScreenState
         _buildCategoryChips(),
         const SizedBox(height: 16),
 
-        // 6. Featured Carousel Cards PageView matching Image 3 squarish 3D scaling effect
+        // 6. Featured Carousel Cards PageView (Square 1:1 AspectRatio + Infinite Loop)
         Expanded(
           child: Center(
             child: AspectRatio(
-              aspectRatio: 0.90,
+              aspectRatio: 1.0,
               child: AnimatedBuilder(
                 animation: _pageController,
                 builder: (context, child) {
-                  double page = 0.0;
+                  double page = 1002.0;
                   if (_pageController.hasClients && _pageController.position.haveDimensions) {
-                    page = _pageController.page ?? 0.0;
+                    page = _pageController.page ?? 1002.0;
                   }
+                  final displayItems = _filteredRitualItems;
+                  if (displayItems.isEmpty) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            color: AppColors.slateGray,
+                            size: 40,
+                          ),
+                          SizedBox(height: 10),
+                          Text(
+                            '검색 결과가 없습니다',
+                            style: TextStyle(
+                              fontFamily: AppFonts.pretendard,
+                              fontSize: 14,
+                              color: AppColors.slateGray,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final isLoop = displayItems.length > 1;
+
                   return PageView.builder(
                     controller: _pageController,
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: _ritualItems.length,
+                    physics: isLoop
+                        ? const BouncingScrollPhysics()
+                        : const NeverScrollableScrollPhysics(),
+                    itemCount: isLoop ? 10000 : 1,
                     itemBuilder: (context, index) {
-                      final item = _ritualItems[index];
-                      final diff = (index - page).abs();
-                      final scale = (1.0 - diff * 0.14).clamp(0.86, 1.0);
-                      final opacity = (1.0 - diff * 0.35).clamp(0.65, 1.0);
+                      final realIndex = isLoop ? (index % displayItems.length) : 0;
+                      final item = displayItems[realIndex];
+                      final diff = isLoop ? (index - page).abs() : 0.0;
+                      final scale = (1.0 - diff * 0.10).clamp(0.88, 1.0);
+                      final opacity = (1.0 - diff * 0.45).clamp(0.55, 1.0);
 
                       return Transform.scale(
                         scale: scale,
                         child: Opacity(
                           opacity: opacity,
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 2.0),
+                            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
                             child: _buildRitualCard(item),
                           ),
                         ),
@@ -365,14 +454,14 @@ class _RecommendedBreathingScreenState
           fontSize: 15,
           color: AppColors.white,
         ),
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           hintText: 'Search',
-          hintStyle: TextStyle(
+          hintStyle: const TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 15,
             color: AppColors.slateGray,
           ),
-          prefixIcon: Padding(
+          prefixIcon: const Padding(
             padding: EdgeInsets.only(left: 16, right: 12),
             child: Icon(
               Icons.search_rounded,
@@ -380,69 +469,64 @@ class _RecommendedBreathingScreenState
               size: 22,
             ),
           ),
-          prefixIconConstraints: BoxConstraints(minWidth: 50),
+          prefixIconConstraints: const BoxConstraints(minWidth: 50),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? GestureDetector(
+                  onTap: () => _searchController.clear(),
+                  child: const Padding(
+                    padding: EdgeInsets.only(right: 14),
+                    child: Icon(
+                      Icons.cancel_rounded,
+                      color: AppColors.slateGray,
+                      size: 20,
+                    ),
+                  ),
+                )
+              : null,
+          suffixIconConstraints: const BoxConstraints(minWidth: 40),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
       ),
     );
   }
 
-  /// 5. Category Chips Row (발표, 시험, 면접, +)
+  /// 5. Category Chips Row (진정, 이완, 집중, 회복, 각성)
   Widget _buildCategoryChips() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
       child: Row(
-        children: [
-          ...List.generate(_categories.length, (index) {
-            final isSelected = _selectedCategoryIndex == index;
-            return Padding(
-              padding: const EdgeInsets.only(right: 10.0),
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedCategoryIndex = index;
-                  });
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isSelected ? AppColors.white : const Color(0xFF252628),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    _categories[index],
-                    style: TextStyle(
-                      fontFamily: AppFonts.pretendard,
-                      fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected ? AppColors.darkBg : AppColors.lightGray,
-                    ),
+        children: List.generate(_categories.length, (index) {
+          final isSelected = _selectedCategoryIndex == index;
+          return Padding(
+            padding: const EdgeInsets.only(right: 10.0),
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedCategoryIndex = index;
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.white : const Color(0xFF252628),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _categories[index],
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: isSelected ? AppColors.darkBg : AppColors.lightGray,
                   ),
                 ),
               ),
-            );
-          }),
-
-          // Plus (+) Add Category Button
-          GestureDetector(
-            onTap: _addCustomCategory,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF252628),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.add_rounded,
-                color: AppColors.lightGray,
-                size: 20,
-              ),
             ),
-          ),
-        ],
+          );
+        }),
       ),
     );
   }
@@ -476,67 +560,79 @@ class _RecommendedBreathingScreenState
               },
             ),
 
-            // Dark Frosted Gradient Overlay
+            // Dark Frosted Vignette Overlay matching Image 2
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.black.withAlpha(30),
-                    Colors.black.withAlpha(140),
-                    Colors.black.withAlpha(220),
+                    Colors.black.withAlpha(40),
+                    Colors.transparent,
+                    Colors.black.withAlpha(120),
+                    Colors.black.withAlpha(180),
                   ],
+                  stops: const [0.0, 0.35, 0.70, 1.0],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
               ),
             ),
 
-            // Bookmark Ribbon Icon on Top Right
+            // Bookmark Ribbon Icon on Top Right (Thinner Sleek Outline Border & Dynamic Toggle)
             Positioned(
-              top: 18,
-              right: 18,
-              child: Icon(
-                item.isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                color: AppColors.white,
-                size: 26,
+              top: 14,
+              right: 16,
+              child: GestureDetector(
+                onTap: () => _toggleBookmark(item.id),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: Icon(
+                    item.isBookmarked
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_border,
+                    color: AppColors.white.withAlpha(item.isBookmarked ? 255 : 210),
+                    size: item.isBookmarked ? 24 : 22,
+                  ),
+                ),
               ),
             ),
 
-            // Bottom Content Information & Action Buttons
+            // Bottom Content Information & Action Buttons matching Image 2 Layout
             Positioned(
               left: 18,
               right: 18,
-              bottom: 20,
+              bottom: 16,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Title: 4-7-8 호흡
+                  // Title: 4-7-8 호흡 (w500 Medium - one step above subtitle w400)
                   Text(
                     item.title,
                     style: const TextStyle(
                       fontFamily: AppFonts.pretendard,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
                       color: AppColors.white,
                       letterSpacing: 0.1,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 7),
 
                   // Subtitle Description: 긴장을 천천히 가라앉히는 호흡
                   Text(
                     item.description,
                     style: TextStyle(
                       fontFamily: AppFonts.pretendard,
-                      fontSize: 13,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w400,
-                      color: AppColors.white.withAlpha(210),
+                      color: AppColors.white.withAlpha(225),
+                      height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
 
-                  // 3. Single Unified Integrated Glass Pill Bar Button (일체형 글래스 버튼)
+                  // Single Unified Integrated Glass Pill Bar Button matching Image 2
                   GestureDetector(
                     onTap: () {
                       Navigator.of(context).push(
@@ -553,49 +649,59 @@ class _RecommendedBreathingScreenState
                         ),
                       );
                     },
-                    child: Container(
-                      height: 52,
-                      padding: const EdgeInsets.only(left: 16, right: 5, top: 4, bottom: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(45),
-                        borderRadius: BorderRadius.circular(26),
-                        border: Border.all(
-                          color: Colors.white.withAlpha(70),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Center(
-                              child: Padding(
-                                padding: EdgeInsets.only(left: 32.0),
-                                child: Text(
-                                  '시작하기',
-                                  style: TextStyle(
-                                    fontFamily: AppFonts.pretendard,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.white,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Container(
+                          width: double.infinity,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(45),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: Colors.white.withAlpha(70),
+                              width: 1,
+                            ),
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Perfectly Centered Text: 시작하기
+                              const Text(
+                                '시작하기',
+                                style: TextStyle(
+                                  fontFamily: AppFonts.pretendard,
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.white,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+
+                              // Right Positioned White Circle Arrow Button
+                              Positioned(
+                                right: 3,
+                                top: 3,
+                                bottom: 3,
+                                child: AspectRatio(
+                                  aspectRatio: 1.0,
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: Color(0xFF1E1E22),
+                                      size: 17,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: const BoxDecoration(
-                              color: AppColors.white,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.arrow_forward_rounded,
-                              color: AppColors.darkBg,
-                              size: 20,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

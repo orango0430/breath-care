@@ -135,7 +135,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                           style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w400,
                             color: AppColors.white,
                           ),
                         ),
@@ -215,7 +215,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                               style: TextStyle(
                                 fontFamily: AppFonts.pretendard,
                                 fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w400,
                                 color: AppColors.darkBg,
                               ),
                             ),
@@ -232,7 +232,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                               style: TextStyle(
                                 fontFamily: AppFonts.pretendard,
                                 fontSize: 38,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w400,
                                 color: AppColors.darkBg,
                                 height: 1,
                               ),
@@ -243,7 +243,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                               style: TextStyle(
                                 fontFamily: AppFonts.pretendard,
                                 fontSize: 15,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w400,
                                 color: AppColors.darkBg.withAlpha(200),
                               ),
                             ),
@@ -278,7 +278,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg,
                                 ),
                               ),
@@ -295,7 +295,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 34,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg,
                                   height: 1,
                                 ),
@@ -306,7 +306,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg.withAlpha(200),
                                 ),
                               ),
@@ -337,7 +337,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg,
                                 ),
                               ),
@@ -354,7 +354,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 34,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg,
                                   height: 1,
                                 ),
@@ -365,7 +365,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg.withAlpha(200),
                                 ),
                               ),
@@ -401,7 +401,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                         style: TextStyle(
                           fontFamily: AppFonts.pretendard,
                           fontSize: 15,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w400,
                           color: AppColors.white,
                         ),
                       ),

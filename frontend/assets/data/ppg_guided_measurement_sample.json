@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-08-19T00:47:00Z",
+  "device_info": "Samsung Galaxy Z Flip4 (SM-F721N)",
+  "sensor_type": "Camera PPG (Red Channel Luminance)",
+  "signal_quality": "EXCELLENT",
+  "confidence_score": 0.96,
+  "calculated_metrics": {
+    "bpm": 74,
+    "hrv_sdnn_ms": 32.8,
+    "respiratory_rate_rpm": 14,
+    "measured_inhale_sec": 2.3,
+    "measured_exhale_sec": 2.5,
+    "condition_score": 86,
+    "stress_index": 28,
+    "stress_level": "LOW"
+  },
+  "raw_signal_samples": [
+    {"t_ms": 0, "red_avg": 218.4, "green_avg": 42.1, "blue_avg": 18.2},
+    {"t_ms": 33, "red_avg": 221.8, "green_avg": 44.0, "blue_avg": 19.0},
+    {"t_ms": 66, "red_avg": 225.1, "green_avg": 46.2, "blue_avg": 20.1},
+    {"t_ms": 99, "red_avg": 227.4, "green_avg": 47.8, "blue_avg": 21.0},
+    {"t_ms": 132, "red_avg": 224.2, "green_avg": 45.0, "blue_avg": 19.5},
+    {"t_ms": 165, "red_avg": 219.0, "green_avg": 42.5, "blue_avg": 18.3},
+    {"t_ms": 198, "red_avg": 215.3, "green_avg": 40.1, "blue_avg": 17.2},
+    {"t_ms": 231, "red_avg": 214.1, "green_avg": 39.8, "blue_avg": 16.9},
+    {"t_ms": 264, "red_avg": 216.5, "green_avg": 41.2, "blue_avg": 17.8},
+    {"t_ms": 297, "red_avg": 220.9, "green_avg": 43.6, "blue_avg": 18.9}
+  ],
+  "inter_beat_intervals_ms": [812, 805, 818, 809, 815, 802, 821, 810]
+}

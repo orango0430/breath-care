@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/responsive.dart';
@@ -7,7 +8,7 @@ import '../utils/breathing_routine_model.dart';
 import 'breathing_exercise_screen.dart';
 import 'log_screen.dart';
 
-class MeasurementResultScreen extends StatelessWidget {
+class MeasurementResultScreen extends StatefulWidget {
   final PpgMeasurementResult? result;
   final BreathingRoutineModel? routine;
 
@@ -18,9 +19,45 @@ class MeasurementResultScreen extends StatelessWidget {
   });
 
   @override
+  State<MeasurementResultScreen> createState() =>
+      _MeasurementResultScreenState();
+}
+
+class _MeasurementResultScreenState extends State<MeasurementResultScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _saveToPrefs();
+  }
+
+  Future<void> _saveToPrefs() async {
+    final activeResult = widget.result ?? PpgMeasurementResult.defaultSample();
+    final score =
+        (activeResult.hrvSdnnMs * 1.4 + 40).clamp(50.0, 96.0).round();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('latest_condition_score', score);
+    await prefs.setInt('latest_bpm', activeResult.bpm);
+    await prefs.setInt('latest_hrv', activeResult.hrvSdnnMs.round());
+
+    final history = prefs.getStringList('condition_score_history') ?? ['57', '81', '92', '84'];
+    history.add(score.toString());
+    await prefs.setStringList('condition_score_history', history);
+
+    final hrHistory = prefs.getStringList('hr_history') ?? [];
+    hrHistory.add(activeResult.bpm.toString());
+    await prefs.setStringList('hr_history', hrHistory);
+
+    final hrvHistory = prefs.getStringList('hrv_history_v2') ?? [];
+    final weekday = DateTime.now().weekday; // 1 = Mon, 7 = Sun
+    final hrvVal = activeResult.hrvSdnnMs.round();
+    hrvHistory.add('$weekday:$hrvVal');
+    await prefs.setStringList('hrv_history_v2', hrvHistory);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final activeResult = result ?? PpgMeasurementResult.defaultSample();
-    final activeRoutine = routine ??
+    final activeResult = widget.result ?? PpgMeasurementResult.defaultSample();
+    final activeRoutine = widget.routine ??
         BreathingRoutineModel.fromMeasurement(
           bpm: activeResult.bpm,
           hrvSdnn: activeResult.hrvSdnnMs,
@@ -109,7 +146,7 @@ class MeasurementResultScreen extends StatelessWidget {
                             style: const TextStyle(
                               fontFamily: AppFonts.pretendard,
                               fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
                         ),
@@ -161,7 +198,7 @@ class MeasurementResultScreen extends StatelessWidget {
             style: TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w400,
               color: AppColors.white,
             ),
           ),
@@ -210,7 +247,7 @@ class MeasurementResultScreen extends StatelessWidget {
             style: TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 13,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w400,
               color: AppColors.lightGray,
             ),
           ),
@@ -229,7 +266,7 @@ class MeasurementResultScreen extends StatelessWidget {
                     style: const TextStyle(
                       fontFamily: AppFonts.pretendard,
                       fontSize: 42,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w400,
                       color: AppColors.white,
                       height: 1.0,
                     ),
@@ -276,7 +313,7 @@ class MeasurementResultScreen extends StatelessWidget {
             style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w400,
               color: AppColors.white,
             ),
           ),
@@ -341,7 +378,7 @@ class MeasurementResultScreen extends StatelessWidget {
               style: TextStyle(
                 fontFamily: AppFonts.pretendard,
                 fontSize: 17,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
                 color: AppColors.white,
               ),
             ),
@@ -407,7 +444,7 @@ class MeasurementResultScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontFamily: AppFonts.pretendard,
                                 fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w400,
                                 color: Color(0xFF222224),
                               ),
                             ),
@@ -417,7 +454,7 @@ class MeasurementResultScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontFamily: AppFonts.pretendard,
                                 fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w400,
                                 color: Color(0xFF53565C),
                               ),
                             ),
@@ -440,7 +477,7 @@ class MeasurementResultScreen extends StatelessWidget {
                           style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 32,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w400,
                             color: Color(0xFF222224),
                             height: 1.0,
                           ),
@@ -451,7 +488,7 @@ class MeasurementResultScreen extends StatelessWidget {
                           style: TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w400,
                             color: Color(0xFF53565C),
                           ),
                         ),
@@ -463,7 +500,7 @@ class MeasurementResultScreen extends StatelessWidget {
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                         color: Color(0xFF222224),
                       ),
                     ),
@@ -495,7 +532,7 @@ class MeasurementResultScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontFamily: AppFonts.pretendard,
                                 fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w400,
                                 color: Color(0xFF222224),
                               ),
                             ),
@@ -505,7 +542,7 @@ class MeasurementResultScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontFamily: AppFonts.pretendard,
                                 fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w400,
                                 color: Color(0xFF53565C),
                               ),
                             ),
@@ -528,7 +565,7 @@ class MeasurementResultScreen extends StatelessWidget {
                           style: const TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 32,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w400,
                             color: Color(0xFF222224),
                             height: 1.0,
                           ),
@@ -539,7 +576,7 @@ class MeasurementResultScreen extends StatelessWidget {
                           style: TextStyle(
                             fontFamily: AppFonts.pretendard,
                             fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w400,
                             color: Color(0xFF53565C),
                           ),
                         ),
@@ -551,7 +588,7 @@ class MeasurementResultScreen extends StatelessWidget {
                       style: const TextStyle(
                         fontFamily: AppFonts.pretendard,
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w400,
                         color: Color(0xFF222224),
                       ),
                     ),
@@ -574,11 +611,11 @@ class MeasurementResultScreen extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'AI 분석',
+          'AI 분석 · 현재 상태',
           style: TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 17,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             color: AppColors.white,
           ),
         ),
@@ -603,7 +640,7 @@ class MeasurementResultScreen extends StatelessWidget {
                 style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 15,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w400,
                   color: AppColors.white,
                   height: 1.3,
                 ),
@@ -640,11 +677,11 @@ class MeasurementResultScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        '측정된 호흡(들숨 ${inhaleStr}초 / 날숨 ${exhaleStr}초)에서 시작하여 1분 30초간 ${routine.title} 목표 템포로 부드럽게 맞춤 조율됩니다.',
+                        '측정된 호흡(들숨 $inhaleStr초 / 날숨 $exhaleStr초)에서 시작하여 1분 30초간 ${routine.title} 목표 템포로 부드럽게 맞춤 조율됩니다.',
                         style: const TextStyle(
                           fontFamily: AppFonts.pretendard,
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w400,
                           color: AppColors.lightMint,
                           height: 1.4,
                         ),

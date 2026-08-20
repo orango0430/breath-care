@@ -56,7 +56,7 @@ class BreathingFeedbackScreen extends StatelessWidget {
                         style: TextStyle(
                           fontFamily: AppFonts.pretendard,
                           fontSize: 24,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w400,
                           color: AppColors.white,
                         ),
                       ),
@@ -113,7 +113,7 @@ class BreathingFeedbackScreen extends StatelessWidget {
           style: TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 20,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             color: AppColors.white,
           ),
         ),
@@ -149,7 +149,7 @@ class BreathingFeedbackScreen extends StatelessWidget {
                 style: const TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 38,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                   color: AppColors.white,
                   height: 1,
                 ),
@@ -252,7 +252,7 @@ class BreathingFeedbackScreen extends StatelessWidget {
             style: TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 18,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w400,
               color: valueColor,
             ),
           ),
@@ -282,7 +282,7 @@ class BreathingFeedbackScreen extends StatelessWidget {
             style: TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w400,
               color: AppColors.white,
             ),
           ),
@@ -331,7 +331,7 @@ class BreathingFeedbackScreen extends StatelessWidget {
           style: TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 16,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             color: AppColors.darkBg,
           ),
         ),

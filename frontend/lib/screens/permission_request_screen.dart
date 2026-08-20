@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,9 +28,11 @@ class PermissionRequestScreen extends StatelessWidget {
   }
 
   Future<void> _requestPermissions(BuildContext context) async {
-    try {
-      await Permission.camera.request();
-    } catch (_) {}
+    if (!kIsWeb) {
+      try {
+        await Permission.camera.request();
+      } catch (_) {}
+    }
     if (!context.mounted) return;
     await _completeAndNavigate(context);
   }
@@ -46,7 +49,17 @@ class PermissionRequestScreen extends StatelessWidget {
             children: [
               const Spacer(flex: 2),
 
-
+              // Top Permission Pebble Icon
+              Image.asset(
+                'assets/images/permission_icon.png',
+                width: 64,
+                height: 64,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return const SizedBox(height: 64);
+                },
+              ),
+              const SizedBox(height: 32),
 
               // Title Header
               const Text(
@@ -55,7 +68,7 @@ class PermissionRequestScreen extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: AppFonts.pretendard,
                   fontSize: 16,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w400,
                   color: AppColors.white,
                   height: 1.45,
                 ),
@@ -106,7 +119,7 @@ class PermissionRequestScreen extends StatelessWidget {
                     style: TextStyle(
                       fontFamily: AppFonts.pretendard,
                       fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w400,
                       color: AppColors.darkBg,
                     ),
                   ),
@@ -164,7 +177,7 @@ class PermissionRequestScreen extends StatelessWidget {
                   style: const TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w400,
                     color: AppColors.white,
                   ),
                 ),

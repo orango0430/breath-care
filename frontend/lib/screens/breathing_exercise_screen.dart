@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -93,7 +94,8 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     if (widget.targetHoldSec != null) return widget.targetHoldSec!;
     if (widget.routineModel != null) return widget.routineModel!.targetHold1;
     if (widget.title.contains('한숨') || widget.title.contains('5-5') || widget.title.contains('5.5') || widget.title.contains('공진') || widget.title.contains('4-6')) return 0.0;
-    if (widget.title.contains('4-4-4-4') || widget.title.contains('박스')) return 4.0;
+    if (widget.title.contains('4-4-4-4')) return 4.0;
+    if (widget.title.contains('4-2-4-2') || widget.title.contains('세미')) return 2.0;
     return 7.0;
   }
 
@@ -102,7 +104,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     if (widget.routineModel != null) return widget.routineModel!.targetExhale;
     if (widget.title.contains('한숨')) return 6.0;
     if (widget.title.contains('5-5') || widget.title.contains('5.5') || widget.title.contains('공진')) return 5.0;
-    if (widget.title.contains('4-4-4-4') || widget.title.contains('박스')) return 4.0;
+    if (widget.title.contains('4-4-4-4') || widget.title.contains('4-2-4-2') || widget.title.contains('세미')) return 4.0;
     if (widget.title.contains('4-6')) return 6.0;
     return 8.0;
   }
@@ -110,7 +112,8 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   double get _targetHold2 {
     if (widget.targetHold2Sec != null) return widget.targetHold2Sec!;
     if (widget.routineModel != null) return widget.routineModel!.targetHold2;
-    if (widget.title.contains('4-4-4-4') || widget.title.contains('박스')) return 4.0;
+    if (widget.title.contains('4-4-4-4')) return 4.0;
+    if (widget.title.contains('4-2-4-2') || widget.title.contains('세미')) return 2.0;
     if (widget.title.contains('4-1-2-1') || widget.title.contains('각성')) return 1.0;
     return 0.0;
   }
@@ -248,6 +251,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
           title: widget.title,
           bgImagePath: widget.bgImagePath,
           durationString: _formattedTime,
+          cycleCount: currentCycle,
           hrvChange: '$averageHrvBpmChange bpm',
         ),
       ),
@@ -292,6 +296,166 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     _animController.repeat();
     if (!_isMuted) _audioPlayer?.resume();
   }
+
+  void _showRestartDialog() {
+    final wasPlayingBeforeModal = isPlaying;
+    setState(() {
+      isPlaying = false;
+    });
+    _cycleStopwatch.stop();
+    _animController.stop();
+    _audioPlayer?.pause();
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withAlpha(90),
+      builder: (dialogContext) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            alignment: const Alignment(0, -0.2),
+            child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+            decoration: BoxDecoration(
+              color: const Color(0xFF27282C),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(100),
+                  blurRadius: 28,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top 3D Image Icon matching screenshot
+                Image.asset(
+                  'assets/images/ic_restart_modal.png',
+                  width: 76,
+                  height: 76,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: 76,
+                      height: 76,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF35363B),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.published_with_changes_rounded,
+                        color: AppColors.lightMint,
+                        size: 40,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Main Title: 처음부터 다시 시작할까요?
+                const Text(
+                  '처음부터 다시 시작할까요?',
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.white,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Subtitle Description: 지금까지의 Ritual 기록은 저장되지 않아요.
+                Text(
+                  '지금까지의 Ritual 기록은\n저장되지 않아요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: AppFonts.pretendard,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.white.withAlpha(125),
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Action Buttons Row: 취소하기 vs 다시하기
+                Row(
+                  children: [
+                    // 1. 취소하기 Button
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pop(dialogContext);
+                          if (wasPlayingBeforeModal) {
+                            setState(() {
+                              isPlaying = true;
+                            });
+                            _cycleStopwatch.start();
+                            _animController.repeat();
+                            if (!_isMuted) _audioPlayer?.resume();
+                          }
+                        },
+                        child: Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1C1D20),
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '취소하기',
+                            style: TextStyle(
+                              fontFamily: AppFonts.pretendard,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.white.withAlpha(110),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+
+                    // 2. 다시하기 Button
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pop(dialogContext);
+                          _restartExercise();
+                        },
+                        child: Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2FBB1),
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            '다시하기',
+                            style: TextStyle(
+                              fontFamily: AppFonts.pretendard,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFF1C1D20),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
   String get _formattedTime {
     final mins = (elapsedSeconds ~/ 60).toString().padLeft(2, '0');
@@ -461,7 +625,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                     _formattedTime,
                     style: GoogleFonts.outfit(
                       fontSize: 38,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w400,
                       color: AppColors.white,
                       letterSpacing: 1.0,
                     ),
@@ -520,7 +684,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 16,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w400,
                                   color: AppColors.lightMint,
                                 ),
                               ),
@@ -533,7 +697,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                             style: const TextStyle(
                               fontFamily: AppFonts.pretendard,
                               fontSize: 13.5,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w400,
                               color: AppColors.white,
                               height: 1.5,
                             ),
@@ -576,7 +740,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
           style: const TextStyle(
             fontFamily: AppFonts.pretendard,
             fontSize: 18,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w400,
             color: AppColors.white,
             letterSpacing: 0.2,
           ),
@@ -602,7 +766,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: _restartExercise,
+              onTap: _showRestartDialog,
               child: Container(
                 width: 42,
                 height: 42,
@@ -663,7 +827,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                   style: TextStyle(
                     fontFamily: AppFonts.pretendard,
                     fontSize: 15,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w400,
                     color: AppColors.white,
                   ),
                 ),
@@ -676,135 +840,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   }
 }
 
-/// Vertical Stage Dotted Lines & Labels Painter
-class _StageDottedLinesPainter extends CustomPainter {
-  final double inhaleSec;
-  final double holdSec;
-  final double exhaleSec;
 
-  _StageDottedLinesPainter({
-    required this.inhaleSec,
-    required this.holdSec,
-    required this.exhaleSec,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    final total = inhaleSec + holdSec + exhaleSec;
-    if (total <= 0) return;
-
-    final linePaint = Paint()
-      ..color = Colors.white.withAlpha(50)
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-
-    const textStyleHeader = TextStyle(
-      fontFamily: AppFonts.pretendard,
-      fontSize: 14,
-      fontWeight: FontWeight.w600,
-      color: Colors.white,
-    );
-
-    const textStyleSub = TextStyle(
-      fontFamily: AppFonts.pretendard,
-      fontSize: 13,
-      fontWeight: FontWeight.w400,
-      color: Color(0xFFD0D4DC),
-    );
-
-    if (holdSec <= 0.1) {
-      // Single line between Inhale and Exhale (No Hold Phase e.g. 5.5-5.5 Resonance)
-      final x1 = w * (inhaleSec / total);
-      _drawDottedVerticalLine(canvas, Offset(x1, h * 0.12), h * 0.70, linePaint);
-
-      final inhaleText = '${inhaleSec.toStringAsFixed(1)}초 들이마시기';
-      final tpInhale = TextPainter(
-        text: TextSpan(text: inhaleText, style: textStyleHeader),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tpInhale.paint(canvas, Offset((x1 - tpInhale.width - 12).clamp(10, w - tpInhale.width - 10), h * 0.22));
-
-      final exhaleText = '${exhaleSec.toStringAsFixed(1)}초 내쉬기';
-      final tpExhale = TextPainter(
-        text: TextSpan(text: exhaleText, style: textStyleHeader),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tpExhale.paint(canvas, Offset((x1 + 12).clamp(10, w - tpExhale.width - 10), h * 0.22));
-
-      final tpInhaleBottom = TextPainter(
-        text: TextSpan(text: '${inhaleSec.toStringAsFixed(1)}초', style: textStyleSub),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tpInhaleBottom.paint(canvas, Offset(x1 - tpInhaleBottom.width - 10, h * 0.62));
-
-      final tpExhaleBottom = TextPainter(
-        text: TextSpan(text: '${exhaleSec.toStringAsFixed(1)}초', style: textStyleSub),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tpExhaleBottom.paint(canvas, Offset(x1 + 10, h * 0.62));
-    } else {
-      // 2 Lines for Inhale -> Hold -> Exhale
-      final x1 = w * (inhaleSec / total);
-      final x2 = w * ((inhaleSec + holdSec) / total);
-
-      _drawDottedVerticalLine(canvas, Offset(x1, h * 0.12), h * 0.70, linePaint);
-      _drawDottedVerticalLine(canvas, Offset(x2, h * 0.12), h * 0.70, linePaint);
-
-      final inhaleText = '${inhaleSec.toStringAsFixed(0)}초 들이마시기';
-      final tpInhale = TextPainter(
-        text: TextSpan(text: inhaleText, style: textStyleHeader),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tpInhale.paint(canvas, Offset((x1 - tpInhale.width / 2).clamp(10, w - tpInhale.width - 10), h * 0.22));
-
-      final holdText = '${holdSec.toStringAsFixed(0)}초 멈추기';
-      final tpHold = TextPainter(
-        text: TextSpan(text: holdText, style: textStyleSub),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final tpHoldX = (x2 + 14).clamp(x1 + tpInhale.width / 2 + 10, w - tpHold.width - 10);
-      tpHold.paint(canvas, Offset(tpHoldX, h * 0.22));
-
-      final tp4s = TextPainter(
-        text: TextSpan(text: '${inhaleSec.toStringAsFixed(0)}초', style: textStyleSub),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp4s.paint(canvas, Offset(x1 - tp4s.width / 2, h * 0.62));
-
-      final tp7s = TextPainter(
-        text: TextSpan(text: '${holdSec.toStringAsFixed(0)}초', style: textStyleSub),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp7s.paint(canvas, Offset(x2 + 10, h * 0.62));
-    }
-  }
-
-  void _drawDottedVerticalLine(Canvas canvas, Offset start, double height, Paint paint) {
-    const dashHeight = 4.0;
-    const dashSpace = 4.0;
-    double startY = start.dy;
-    final endY = start.dy + height;
-
-    while (startY < endY) {
-      canvas.drawLine(
-        Offset(start.dx, startY),
-        Offset(start.dx, (startY + dashHeight).clamp(startY, endY)),
-        paint,
-      );
-      startY += dashHeight + dashSpace;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _StageDottedLinesPainter oldDelegate) {
-    return oldDelegate.inhaleSec != inhaleSec ||
-        oldDelegate.holdSec != holdSec ||
-        oldDelegate.exhaleSec != exhaleSec;
-  }
-}
 
 /// 1-Minute Scientific Adaptive Wave & Glowing Ball Painter
 class _BreathingWavePainter extends CustomPainter {
@@ -1015,16 +1051,11 @@ class _BreathingWavePainter extends CustomPainter {
     const textStyleHeader = TextStyle(
       fontFamily: AppFonts.pretendard,
       fontSize: 14,
-      fontWeight: FontWeight.w600,
+      fontWeight: FontWeight.w400,
       color: Colors.white,
     );
 
-    const textStyleSub = TextStyle(
-      fontFamily: AppFonts.pretendard,
-      fontSize: 13,
-      fontWeight: FontWeight.w400,
-      color: Color(0xFFD0D4DC),
-    );
+
 
     for (int cycle = -1; cycle <= 2; cycle++) {
       final originX = cycle * cycleW;
@@ -1224,7 +1255,7 @@ class _BreathingWavePainter extends CustomPainter {
         style: const TextStyle(
           fontFamily: AppFonts.pretendard,
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           color: Color(0xFFE2FFDA),
         ),
       ),

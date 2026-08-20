@@ -103,8 +103,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               final isThirdSlide = index == 2;
               if (isSecondSlide) {
                 return Transform.scale(
-                  scale: 1.22,
-                  alignment: const Alignment(0.2, -0.2),
+                  scale: 1.88,
+                  alignment: const Alignment(0.50, 0.12),
                   child: Image.asset(
                     _items[index].imagePath,
                     fit: BoxFit.cover,
@@ -117,12 +117,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               }
               if (isThirdSlide) {
                 return Transform.scale(
-                  scale: 1.12,
-                  alignment: const Alignment(-0.65, -0.25),
+                  scale: 1.22,
+                  alignment: const Alignment(-0.30, -0.65),
                   child: Image.asset(
                     _items[index].imagePath,
                     fit: BoxFit.cover,
-                    alignment: const Alignment(-0.65, -0.25),
+                    alignment: Alignment.center,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(color: AppColors.darkBg);
                     },
@@ -319,7 +319,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 style: TextStyle(
                                   fontFamily: AppFonts.pretendard,
                                   fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w400,
                                   color: AppColors.darkBg,
                                 ),
                               ),
