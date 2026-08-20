@@ -76,7 +76,7 @@ public class PpgSignalProcessor implements SignalProcessor {
     /// 조금만 높아도 작은 박동이 통째로 안 잡히고 "피크부족"으로 떨어진다. 낮추면
     /// 없는 봉우리를 주울 위험이 있지만, 그건 뒤의 불응기와 간격 이상치 제거가
     /// 한 번 더 거른다. 못 잡은 박동은 되살릴 방법이 없다.
-    private static final double PEAK_THRESHOLD_RATIO = 1.25;
+    private static final double PEAK_THRESHOLD_RATIO = 1.1;
 
     /**
      * RR 간격이 중앙값에서 이 비율 이상 벗어나면 버린다. 움직임 때문에 튄 것으로 본다.
@@ -101,14 +101,16 @@ public class PpgSignalProcessor implements SignalProcessor {
      * 버려진 RR 비율이 이보다 크면 POOR, 그 아래 FAIR_REJECT_RATIO보다 크면 FAIR.
      *
      * <p>POOR는 측정을 통째로 버리고 다시 재라는 뜻이라 문턱이 높아야 한다. 0.3에서
-     * 올렸다 — 3할쯤 버려진 신호는 숫자를 내되 FAIR로 표시하는 편이, 재측정을
-     * 반복시키는 것보다 쓸모 있다.
+     * 두 번 올렸다. 실기기에서 18초·16박을 제대로 잡은 측정이 <b>47% 버림</b>으로
+     * 거부됐다 — 앞의 네 관문을 다 통과하고 마지막에서 7%p 차이로 떨어진 것이다.
+     * 어두운 화면에서는 봉우리 높이가 들쭉날쭉해 간격이 그만큼 튀는 게 정상이고,
+     * 그런 신호도 숫자를 내되 FAIR로 표시하는 편이 재측정을 반복시키는 것보다 낫다.
      *
      * <p>FAIR 문턱은 건드리지 않았다. GOOD과 FAIR을 가르는 선일 뿐 통과 여부와는
      * 무관해서 풀어도 얻는 게 없고, 올렸더니 4초간 크게 흔들린 측정까지 GOOD으로
      * 올라섰다. 흔들린 건 흔들렸다고 말해야 한다.
      */
-    private static final double POOR_REJECT_RATIO = 0.4;
+    private static final double POOR_REJECT_RATIO = 0.55;
     private static final double FAIR_REJECT_RATIO = 0.1;
 
     @Override

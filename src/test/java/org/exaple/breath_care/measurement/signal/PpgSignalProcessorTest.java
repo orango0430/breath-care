@@ -109,6 +109,26 @@ class PpgSignalProcessorTest {
     }
 
     @Test
+    @DisplayName("실기기에서 절반 가까이 버려진 측정도 숫자는 낸다")
+    void acceptsARealTakeWithHeavyIntervalScatter() {
+        // 실측: 18초·40fps·764샘플에서 16박을 잡았고 간격 15개 중 8개만 남았다(47% 버림).
+        // 앞의 네 관문을 다 통과하고 마지막 품질 판정에서만 걸렸던 측정이다. 어두운
+        // 화면에서는 봉우리 높이가 고르지 않아 이 정도 흩어짐이 나온다.
+        // 흩어짐의 정도까지 합성으로 흉내 내지는 않는다. 그 비율은 봉우리 높이가
+        // 불규칙해서 생기는 것이라 규칙적인 합성 파형으로는 재현되지 않고, 재현되지
+        // 않는 값을 단언하면 통과해도 아무것도 보장하지 못한다. 여기서 지키는 것은
+        // "느린 심박을 40fps로 잰 측정이 거부되지 않는다"까지다.
+        double[] samples = synthesize(53, 21, 90, 12, 40);
+
+        SignalResult result = processor.process(samples, 40);
+
+        assertThat(result.isUsable())
+                .as("박동을 잡았으면 참고치는 나와야 한다")
+                .isTrue();
+        assertThat(result.hr()).isCloseTo(53.0, within(3.0));
+    }
+
+    @Test
     @DisplayName("정말 짧은 측정은 여전히 거부한다")
     void stillRejectsAGenuinelyShortTake() {
         // 여유를 준 것이지 문을 연 것이 아니다. 10초짜리는 HRV를 믿을 수 없다.
