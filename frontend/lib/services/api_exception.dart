@@ -19,6 +19,11 @@ class ApiException implements Exception {
   static const String poorSignalQuality = 'POOR_SIGNAL_QUALITY';
   static const String insufficientData = 'INSUFFICIENT_DATA';
   static const String reportUnavailable = 'REPORT_UNAVAILABLE';
+  static const String invalidSocialToken = 'INVALID_SOCIAL_TOKEN';
+
+  /// Raised locally too: the Google SDK failing is indistinguishable, from the
+  /// screen's point of view, from the server having social login switched off.
+  static const String socialUnavailable = 'SOCIAL_LOGIN_UNAVAILABLE';
 
   /// Client-side codes. The server never sends these; we raise them so callers
   /// can handle "no network" with the same `catch (ApiException)` they already

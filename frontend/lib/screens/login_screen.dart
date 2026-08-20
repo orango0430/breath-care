@@ -85,6 +85,26 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _onGooglePressed() async {
+    if (_isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      final user = await AuthService.instance.signInWithGoogle();
+      // Null means the account picker was dismissed. Nothing went wrong, so
+      // say nothing — just leave them on the login screen.
+      if (user == null || !mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false,
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -249,14 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       _buildSocialPillButton(
                         icon: const _GoogleGLogo(size: 20),
                         text: 'Google로 계속하기',
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Google 로그인 연동 중...'),
-                              duration: Duration(seconds: 1),
-                            ),
-                          );
-                        },
+                        onTap: _onGooglePressed,
                       ),
                       const SizedBox(height: 48),
 

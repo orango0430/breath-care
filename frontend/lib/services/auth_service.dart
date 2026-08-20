@@ -1,5 +1,6 @@
 import '../models/user.dart';
 import 'api_client.dart';
+import 'google_auth.dart';
 import 'push_service.dart';
 
 /// Signup, login, logout.
@@ -48,6 +49,17 @@ class AuthService {
     return User.fromJson(data['user'] as Map<String, dynamic>);
   }
 
+  /// The whole Google flow: account picker, Firebase exchange, then our own
+  /// login. Returns null when the user dismissed the picker.
+  ///
+  /// Signup and login call the same thing on purpose — the server creates the
+  /// account on first sight of a Google user, so there is no separate step.
+  Future<User?> signInWithGoogle() async {
+    final idToken = await GoogleAuth.instance.idToken();
+    if (idToken == null) return null;
+    return loginWithGoogle(idToken);
+  }
+
   /// Google sign-in. Hand over the ID token from the Google SDK and the server
   /// exchanges it for ours, creating or linking the account as needed.
   Future<User> loginWithGoogle(String idToken) async {
@@ -73,6 +85,9 @@ class AuthService {
           body: fcmToken == null ? null : {'fcmToken': fcmToken});
     } finally {
       await _client.setToken(null);
+      // Otherwise the next "Google로 계속하기" silently reuses the account that
+      // just logged out, with no picker and no way to switch.
+      await GoogleAuth.instance.signOut();
     }
   }
 
@@ -81,6 +96,9 @@ class AuthService {
       await _client.delete('/api/auth/withdraw');
     } finally {
       await _client.setToken(null);
+      // Otherwise the next "Google로 계속하기" silently reuses the account that
+      // just logged out, with no picker and no way to switch.
+      await GoogleAuth.instance.signOut();
     }
   }
 }

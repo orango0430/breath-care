@@ -152,6 +152,8 @@ class PpgSensorService {
   double debugAvgU = 0.0;
   double debugAvgV = 0.0;
   double debugDiff = 0.0;
+  double debugSpread = 0.0;
+  DateTime? _lastDebugLogAt;
 
   final StreamController<double> _ppgValueController =
       StreamController<double>.broadcast();
@@ -165,6 +167,11 @@ class PpgSensorService {
   double _prevPrevY = 0.0;
   final List<double> _yHistory = [];
 
+  /// Consecutive frames on either side of the contact test. See
+  /// [updateFingerState] for why contact is debounced in both directions.
+  int _contactFrames = 0;
+  int _releaseFrames = 0;
+
   final List<DateTime> _peakTimestamps = [];
   final List<double> _rrIntervalsMs = [];
   Timer? _simulationTimer;
@@ -176,19 +183,22 @@ class PpgSensorService {
   /// the untouched signal, and the stored copy is what we replay later when
   /// tuning the algorithm.
   final List<double> _waveform = [];
-  DateTime? _captureStartedAt;
-  DateTime? _captureEndedAt;
+  /// Milliseconds accumulated across frames, skipping the gaps where contact
+  /// was lost. See [capturedDurationSec].
+  int _capturedMillis = 0;
+  DateTime? _lastSampleAt;
 
   /// The samples to upload. Empty until a finger is detected.
   List<double> get waveform => List.unmodifiable(_waveform);
 
-  /// Wall-clock seconds spanned by [waveform].
-  int get capturedDurationSec {
-    final start = _captureStartedAt;
-    final end = _captureEndedAt ?? DateTime.now();
-    if (start == null) return 0;
-    return end.difference(start).inMilliseconds ~/ 1000;
-  }
+  /// Seconds of actual contact behind [waveform].
+  ///
+  /// Not wall-clock: the countdown pauses whenever the finger lifts, so a
+  /// 20-second measurement can span a minute. Charging that idle time to the
+  /// waveform would halve the reported frame rate, and the server derives
+  /// heart rate straight from that number — a 72 bpm pulse would come back
+  /// as 36.
+  int get capturedDurationSec => _capturedMillis ~/ 1000;
 
   /// Frames actually delivered per second, measured rather than assumed.
   ///
@@ -217,9 +227,11 @@ class PpgSensorService {
     _peakTimestamps.clear();
     _rrIntervalsMs.clear();
     _yHistory.clear();
+    _contactFrames = 0;
+    _releaseFrames = 0;
     _waveform.clear();
-    _captureStartedAt = null;
-    _captureEndedAt = null;
+    _capturedMillis = 0;
+    _lastSampleAt = null;
     _prevY = 0.0;
     _prevPrevY = 0.0;
 
@@ -253,6 +265,20 @@ class PpgSensorService {
         debugPrint('Flash torch not supported on device: $e');
       }
 
+      // The pulse we are looking for is a fraction of a percent of brightness.
+      // Auto-exposure treats that as something to correct and rides it out,
+      // and autofocus hunts against a lens that has a finger pressed to it —
+      // between them they can erase the signal entirely. Give the torch a
+      // moment to reach full output, then freeze both.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      try {
+        await _cameraController!.setExposureMode(ExposureMode.locked);
+        await _cameraController!.setFocusMode(FocusMode.locked);
+      } catch (e) {
+        // Some devices refuse to lock. Detection still works, it just drifts.
+        debugPrint('Exposure/focus lock unavailable: $e');
+      }
+
       _isCameraAvailable = true;
       await _cameraController!.startImageStream(_processCameraFrame);
     } catch (e) {
@@ -277,6 +303,7 @@ class PpgSensorService {
     if (_isDisposed || _cameraController == null) return;
 
     double ySum = 0;
+    double ySqSum = 0;
     double uSum = 0;
     double vSum = 0;
     int sampleCount = 0;
@@ -299,6 +326,7 @@ class PpgSensorService {
         final v = vBytes[vIdx].toDouble();
 
         ySum += y;
+        ySqSum += y * y;
         uSum += u;
         vSum += v;
         sampleCount++;
@@ -315,6 +343,7 @@ class PpgSensorService {
         final v = uvBytes[uvIdx + 1].toDouble();
 
         ySum += y;
+        ySqSum += y * y;
         uSum += u;
         vSum += v;
         sampleCount++;
@@ -323,7 +352,9 @@ class PpgSensorService {
       final yBytes = image.planes[0].bytes;
       final step = math.max(1, yBytes.length ~/ 200);
       for (int i = 0; i < yBytes.length; i += step) {
-        ySum += yBytes[i].toDouble();
+        final y = yBytes[i].toDouble();
+        ySum += y;
+        ySqSum += y * y;
         sampleCount++;
       }
       uSum = 128.0 * sampleCount;
@@ -336,30 +367,42 @@ class PpgSensorService {
     final avgU = uSum / sampleCount;
     final avgV = vSum / sampleCount;
     final chromDiff = avgV - avgU;
+    // How much the frame varies across itself. A finger pressed to the lens is
+    // a flat wash of one colour; anything the camera can actually see is not.
+    final variance = math.max(0.0, ySqSum / sampleCount - avgY * avgY);
+    final spread = math.sqrt(variance);
 
     debugAvgY = avgY;
     debugAvgU = avgU;
     debugAvgV = avgV;
     debugDiff = chromDiff;
+    debugSpread = spread;
 
-    // Strict Finger Contact Condition:
-    // Finger covering torch LED yields high V (> 160) and low U (< 115) -> chromDiff > 45
-    // Air/room light yields neutral V ~128 and U ~128 -> chromDiff < 15
-    final detected = (chromDiff > 45.0 && avgV > 150.0) || kIsWeb;
-
-    if (detected != isFingerDetected) {
-      isFingerDetected = detected;
-      if (!_fingerStateController.isClosed && !_isDisposed) {
-        _fingerStateController.add(isFingerDetected);
+    if (kDebugMode) {
+      final now = DateTime.now();
+      if (_lastDebugLogAt == null ||
+          now.difference(_lastDebugLogAt!).inMilliseconds > 1000) {
+        _lastDebugLogAt = now;
+        debugPrint('PPG Y=${avgY.toStringAsFixed(1)} '
+            'diff=${chromDiff.toStringAsFixed(1)} '
+            'spread=${spread.toStringAsFixed(1)} '
+            'finger=$isFingerDetected');
       }
     }
+
+    updateFingerState(chromDiff, avgV, spread);
 
     if (isFingerDetected && !_ppgValueController.isClosed && !_isDisposed) {
       final now = DateTime.now();
       _ppgValueController.add(avgY);
 
-      _captureStartedAt ??= now;
-      _captureEndedAt = now;
+      // A gap wider than this means the finger came off, not a slow frame,
+      // so it does not count toward the measured duration.
+      final since = _lastSampleAt == null
+          ? 0
+          : now.difference(_lastSampleAt!).inMilliseconds;
+      if (since > 0 && since < 400) _capturedMillis += since;
+      _lastSampleAt = now;
       // The server rejects anything past 30,000 samples, so stop growing at the
       // cap instead of building a request that is guaranteed to be refused.
       if (_waveform.length < 30000) {
@@ -391,6 +434,69 @@ class PpgSensorService {
 
       _prevPrevY = _prevY;
       _prevY = avgY;
+    }
+  }
+
+  /// Decides whether a finger is on the lens, with separate thresholds for
+  /// latching on and dropping off.
+  ///
+  /// The old test — `chromDiff > 45 && avgV > 150` — was written against one
+  /// phone with its torch already settled. Two things break it elsewhere:
+  /// auto white balance pulls the red cast back toward neutral within a second
+  /// of the torch coming on, dragging chromDiff down into the twenties, and a
+  /// thin or cold fingertip is simply less red to begin with. Both give a
+  /// signal that is perfectly measurable while never once meeting the bar, so
+  /// the screen sat on "손가락을 올려주세요" forever.
+  ///
+  /// A single threshold also made contact flicker frame by frame, and since
+  /// samples are only kept while contact holds, the waveform came out full of
+  /// holes — which the server sees as a broken pulse and rejects.
+  @visibleForTesting
+  void updateFingerState(double chromDiff, double avgV, double spread) {
+    if (kIsWeb) {
+      if (!isFingerDetected) _setFingerDetected(true);
+      return;
+    }
+
+    // Room light and skin are far apart even after AWB has done its worst: an
+    // uncovered lens sits near chromDiff 0-10, a covered one at 20 and up.
+    //
+    // Colour alone is not enough though — a warm-lit room passes it. What
+    // separates the two is structure: covering the lens leaves a flat field,
+    // while any real view has edges and shading. On the emulator, whose fake
+    // camera renders a furnished room, colour alone latched on with no finger
+    // anywhere near the device.
+    // 32 sits between the two cases with room on both sides: a covered lens
+    // measures well under 20, and the emulator's rendered room — the softest,
+    // least textured scene anything is likely to see — measured 45.
+    final looksLikeSkin = chromDiff > 20.0 && avgV > 132.0 && spread < 32.0;
+    // Deliberately lower than the entry bar. Once contact is established, a
+    // momentary dip from pressure or a shifting finger should not throw away
+    // the measurement in progress.
+    final clearlyGone = chromDiff < 12.0 || avgV < 122.0 || spread > 50.0;
+
+    if (!isFingerDetected) {
+      _contactFrames = looksLikeSkin ? _contactFrames + 1 : 0;
+      // Roughly a fifth of a second. Long enough to ignore a red object
+      // passing the lens, short enough that the user does not feel a lag.
+      if (_contactFrames >= 5) {
+        _releaseFrames = 0;
+        _setFingerDetected(true);
+      }
+      return;
+    }
+
+    _releaseFrames = clearlyGone ? _releaseFrames + 1 : 0;
+    if (_releaseFrames >= 10) {
+      _contactFrames = 0;
+      _setFingerDetected(false);
+    }
+  }
+
+  void _setFingerDetected(bool detected) {
+    isFingerDetected = detected;
+    if (!_fingerStateController.isClosed && !_isDisposed) {
+      _fingerStateController.add(detected);
     }
   }
 

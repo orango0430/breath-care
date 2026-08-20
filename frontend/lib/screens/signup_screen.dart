@@ -116,6 +116,26 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+  Future<void> _onGooglePressed() async {
+    if (_isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      // Same call as the login screen: the server creates the account the
+      // first time it sees a Google user, so there is nothing to sign up for.
+      final user = await AuthService.instance.signInWithGoogle();
+      if (user == null || !mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false,
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -295,14 +315,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       _buildSocialPillButton(
                         icon: const _GoogleGLogo(size: 20),
                         text: 'Google로 시작하기',
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Google 회원가입 연동 중...'),
-                              duration: Duration(seconds: 1),
-                            ),
-                          );
-                        },
+                        onTap: _onGooglePressed,
                       ),
                       const SizedBox(height: 38),
 
