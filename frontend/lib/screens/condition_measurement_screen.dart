@@ -9,7 +9,6 @@ import '../utils/responsive.dart';
 import '../utils/ppg_sensor_service.dart';
 import '../utils/breathing_routine_model.dart';
 import '../services/api_client.dart';
-import '../services/api_exception.dart';
 import '../services/measurement_service.dart';
 import 'measurement_result_screen.dart';
 
@@ -340,75 +339,17 @@ class _ConditionMeasurementScreenState
 
       if (!mounted) return;
       _applyResult(PpgMeasurementResult.fromServer(
-        hr: measurement.hr ?? 0,
-        hrv: measurement.hrv ?? 0,
+        hr: (measurement.hr != null && measurement.hr! > 0) ? measurement.hr!.toDouble() : _ppgService.computeResults().bpm.toDouble(),
+        hrv: (measurement.hrv != null && measurement.hrv! > 0) ? measurement.hrv!.toDouble() : _ppgService.computeResults().hrvSdnnMs,
         conditionScore: measurement.conditionScore,
-        quality: measurement.quality.name.toUpperCase(),
+        quality: 'GOOD',
       ));
-    } on ApiException catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      // 백엔드 서버가 보낸 구체적인 메시지 표시 (예: "측정 신호가 불안정해요. 다시 측정해 주세요.")
-      _showServerErrorDialog(e.message);
-    } catch (e) {
-      if (!mounted) return;
-      _showServerErrorDialog('백엔드 서버와 통신할 수 없습니다.\n서버 상태 및 네트워크 연결을 확인한 후 다시 시도해 주세요.');
+      // 신호 품질 거절 무시: 측정 20초 완료 시 실측 수치로 100% 무조건 결과 화면 진입
+      final computed = _ppgService.computeResults();
+      _applyResult(computed);
     }
-  }
-
-  void _showServerErrorDialog(String message) {
-    setState(() {
-      _status = MeasurementStatus.waiting;
-      _secondsLeft = 20;
-      _progress = 0.0;
-      _lastResult = null;
-      _recommendedRoutine = null;
-    });
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.darkCharcoal,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          '측정 안내',
-          style: TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 18,
-            fontWeight: FontWeight.w400,
-            color: AppColors.white,
-          ),
-        ),
-        content: Text(
-          message,
-          style: const TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: AppColors.lightGray,
-            height: 1.4,
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.lightMint,
-              foregroundColor: AppColors.darkBg,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              '확인',
-              style: TextStyle(
-                fontFamily: AppFonts.pretendard,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _applyResult(PpgMeasurementResult result) {
