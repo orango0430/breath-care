@@ -12,6 +12,7 @@ import 'package:breath_care/services/auth_service.dart';
 import 'package:breath_care/services/calendar_service.dart';
 import 'package:breath_care/models/session.dart';
 import 'package:breath_care/services/measurement_service.dart';
+import 'package:breath_care/services/report_service.dart';
 import 'package:breath_care/services/session_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -281,6 +282,45 @@ void main() {
         await CalendarService.instance.setCompleted(created.id, false);
     expect(cleared.completed, isFalse);
   }, timeout: const Timeout(Duration(seconds: 120)));
+
+  test('측정이 모자라면 리포트는 INSUFFICIENT_DATA, 채우면 만들어진다', () async {
+    await AuthService.instance
+        .signup(email: email, password: 'password123', nickname: '리포트');
+    await AuthService.instance.login(email: email, password: 'password123');
+
+    // 아직 만든 적이 없으면 조회는 null이다. 화면은 이때 "AI 분석 받기"를 띄운다.
+    expect(await ReportService.instance.weekly(), isNull);
+
+    // 서버 정책상 이번 주 측정이 3회는 있어야 한다. 두 번만 넣어 두고 확인한다.
+    for (final bpm in [70.0, 74.0]) {
+      await MeasurementService.instance.submit(
+        samples: _pulseWave(bpm: bpm, fps: fps, durationSec: durationSec),
+        fps: fps,
+        durationSec: durationSec,
+      );
+    }
+    expect(
+      () => ReportService.instance.generate(),
+      throwsA(isA<ApiException>()
+          .having((e) => e.code, 'code', ApiException.insufficientData)),
+    );
+
+    // 세 번째를 채우면 모델이 실제로 글을 쓴다.
+    await MeasurementService.instance.submit(
+      samples: _pulseWave(bpm: 66, fps: fps, durationSec: durationSec),
+      fps: fps,
+      durationSec: durationSec,
+    );
+
+    final report = await ReportService.instance.generate();
+    expect(report.summary, isNotEmpty);
+    expect(report.disclaimer, isNotEmpty, reason: '의학적 진단이 아니라는 문구는 항상 붙는다');
+    expect(report.cached, isFalse, reason: '처음 만든 것은 캐시가 아니다');
+
+    // 두 번째 조회는 저장된 것을 그대로 준다. 모델을 다시 부르지 않는다.
+    final again = await ReportService.instance.weekly();
+    expect(again?.summary, report.summary);
+  }, timeout: const Timeout(Duration(seconds: 180)));
 
   test('서버 주소가 https인지 확인 — 평문이면 릴리즈 APK에서 차단된다', () {
     expect(ApiConfig.baseUrl, startsWith('https://'),

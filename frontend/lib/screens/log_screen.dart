@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
 import '../services/calendar_service.dart';
+import '../services/report_service.dart';
 import '../services/statistics_service.dart';
 import '../models/statistics.dart';
 import '../theme/app_colors.dart';
@@ -92,6 +93,7 @@ class _LogScreenState extends State<LogScreen> {
     _currentDisplayMonth = DateTime(now.year, now.month, 1);
     _loadSchedules();
     _loadStatistics();
+    _loadReport();
   }
 
   /// Fetches the displayed month. The server treats `to` as exclusive, so the
@@ -164,6 +166,52 @@ class _LogScreenState extends State<LogScreen> {
     final period = at.hour < 12 ? '오전' : '오후';
     final hour = at.hour == 0 ? 12 : (at.hour > 12 ? at.hour - 12 : at.hour);
     return '$period $hour:${at.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// This week's AI report, once it has been written.
+  WeeklyReport? _report;
+  bool _reportBusy = false;
+
+  /// Why there is no report, in the server's own words — too few readings, or
+  /// the model being unreachable. Null when there is simply nothing yet.
+  String? _reportProblem;
+
+  /// Reads the stored report. Never calls the model, so it is safe on entry.
+  Future<void> _loadReport() async {
+    if (!ApiClient.instance.isLoggedIn) return;
+    try {
+      final report = await ReportService.instance.weekly();
+      if (!mounted) return;
+      setState(() => _report = report);
+    } on ApiException {
+      // Leave the empty state. The button is still there to try properly.
+    }
+  }
+
+  /// Writes the report. Slow — it calls an external model.
+  Future<void> _generateReport({bool refresh = false}) async {
+    if (_reportBusy) return;
+    setState(() {
+      _reportBusy = true;
+      _reportProblem = null;
+    });
+
+    try {
+      final report = await ReportService.instance.generate(refresh: refresh);
+      if (!mounted) return;
+      setState(() {
+        _report = report;
+        _reportBusy = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // INSUFFICIENT_DATA and REPORT_UNAVAILABLE both arrive with wording the
+      // server wrote for the user. Neither is fatal — the charts above stay.
+      setState(() {
+        _reportBusy = false;
+        _reportProblem = e.message;
+      });
+    }
   }
 
   /// Loads this week's numbers for the 기록 and 분석결과 tabs.
@@ -1799,21 +1847,49 @@ class _LogScreenState extends State<LogScreen> {
   }
 
   /// 4. AI 분석 · 현재 상태 카드
+  /// 4. AI 분석 · 현재 상태
+  ///
+  /// The text is written by the model from this account's own readings. It was
+  /// a fixed passage before — "정상 범위 내에서 안정적인 상태를 유지하고 있어요"
+  /// appeared whatever the numbers were, with only the bpm figures dropped in.
+  /// A health screen must not narrate an interpretation nobody made.
   Widget _buildAiAnalysisCard() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'AI 분석 · 현재 상태',
-          style: TextStyle(
-            fontFamily: AppFonts.pretendard,
-            fontSize: 18,
-            fontWeight: FontWeight.w400,
-            color: Colors.white,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'AI 분석 · 현재 상태',
+              style: TextStyle(
+                fontFamily: AppFonts.pretendard,
+                fontSize: 18,
+                fontWeight: FontWeight.w400,
+                color: Colors.white,
+              ),
+            ),
+            // Rewriting costs a model call, so it is only offered once there
+            // is something to replace.
+            if (_report != null && !_reportBusy)
+              GestureDetector(
+                onTap: () => _generateReport(refresh: true),
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Text(
+                    '다시 분석',
+                    style: TextStyle(
+                      fontFamily: AppFonts.pretendard,
+                      fontSize: 13,
+                      color: AppColors.lightMint,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 14),
-
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
@@ -1821,77 +1897,150 @@ class _LogScreenState extends State<LogScreen> {
             color: const Color(0xFF28292D),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header title (No chevron >)
-              const Text(
-                '심박수가 높아지는 순간, 리추얼이 도움이 될 수 있어요',
-                style: TextStyle(
-                  fontFamily: AppFonts.pretendard,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white,
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Rich Text Insights
-              RichText(
-                text: TextSpan(
-                  style: const TextStyle(
-                    fontFamily: AppFonts.pretendard,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFF90939A),
-                    height: 1.6,
-                  ),
-                  children: [
-                    const TextSpan(text: '오늘의 평균 심박수는 '),
-                    TextSpan(
-                      text: '$_avgHrStr BPM',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w400,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const TextSpan(text: '으로,\n정상 범위 내에서 안정적인 상태를 유지하고 있어요.\n\n'),
-                    const TextSpan(text: '다만, 최고 심박수가 '),
-                    TextSpan(
-                      text: '$_maxHrStr BPM',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w400,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const TextSpan(text: '까지 상승한 순간이 있었어요.\n이는 일시적인 긴장이나 집중, 혹은 다가오는 일정에 대한 준비 상태로 볼 수 있어요.\n\n'),
-                    const TextSpan(text: '최저 심박수는 '),
-                    TextSpan(
-                      text: '$_minHrStr BPM',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w400,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const TextSpan(text: '으로 관찰되며,\n이는 리추얼 이후 이완된 상태에서 나타나는 자연스러운 수치예요.\n\n'),
-                    const TextSpan(text: '전반적인 컨디션은 양호한 편이며, 심박수가 높아지는 순간엔\n'),
-                    const TextSpan(
-                      text: '짧은 리추얼로 미리 준비해보는 걸 추천드려요.',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w400,
-                        color: Color(0xFFE4FBCB),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          child: _buildAiAnalysisBody(),
         ),
       ],
     );
   }
+
+  Widget _buildAiAnalysisBody() {
+    if (_reportBusy) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 18),
+        child: Column(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.2,
+                color: AppColors.lightMint,
+              ),
+            ),
+            SizedBox(height: 14),
+            Text(
+              '이번 주 기록을 읽고 있어요...',
+              style: TextStyle(
+                fontFamily: AppFonts.pretendard,
+                fontSize: 13,
+                color: Color(0xFF90939A),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final report = _report;
+    if (report == null) {
+      return _buildAiAnalysisEmpty();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          report.summary,
+          style: const TextStyle(
+            fontFamily: AppFonts.pretendard,
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            color: Colors.white,
+            height: 1.4,
+          ),
+        ),
+        if (report.insights.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          ...report.insights.map((line) => _buildReportLine(line)),
+        ],
+        if (report.advice.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          ...report.advice.map(
+            (line) => _buildReportLine(line, color: const Color(0xFFE4FBCB)),
+          ),
+        ],
+        if (report.disclaimer.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text(
+            report.disclaimer,
+            style: const TextStyle(
+              fontFamily: AppFonts.pretendard,
+              fontSize: 11,
+              color: AppColors.slateGray,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// No report yet, or the server refused to write one.
+  Widget _buildAiAnalysisEmpty() {
+    final problem = _reportProblem;
+    final loggedIn = ApiClient.instance.isLoggedIn;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          problem ??
+              (loggedIn
+                  ? '이번 주 측정을 모아 분석해 드려요.'
+                  : '로그인하면 측정 기록을 분석해 드려요.'),
+          style: const TextStyle(
+            fontFamily: AppFonts.pretendard,
+            fontSize: 14,
+            color: Color(0xFF90939A),
+            height: 1.6,
+          ),
+        ),
+        if (loggedIn) ...[
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              onPressed: () => _generateReport(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.lightMint,
+                foregroundColor: AppColors.darkBg,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(23),
+                ),
+              ),
+              child: const Text(
+                'AI 분석 받기',
+                style: TextStyle(
+                  fontFamily: AppFonts.pretendard,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildReportLine(String text, {Color color = const Color(0xFF90939A)}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontFamily: AppFonts.pretendard,
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+          color: color,
+          height: 1.6,
+        ),
+      ),
+    );
+  }
+
 
   /// 5. 의료 참고용 하단 안내 문구
   Widget _buildMedicalDisclaimerText() {
