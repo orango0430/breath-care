@@ -333,7 +333,9 @@ class _ConditionMeasurementScreenState
       // POOR_SIGNAL_QUALITY is the expected outcome of a bad take, not a
       // crash. Send the user back to measure again instead of inventing a
       // number — a made-up reading is worse than no reading in a health app.
-      _showRetakePrompt(e.message);
+      // The capture numbers ride along with the message. Without them a
+      // rejection is unactionable on a phone — see [captureSummary].
+      _showRetakePrompt('${e.message}\n${_ppgService.captureSummary}');
     }
   }
 
@@ -356,7 +358,9 @@ class _ConditionMeasurementScreenState
       SnackBar(
         content: Text(message),
         backgroundColor: AppColors.coralRed,
-        duration: const Duration(seconds: 4),
+        // Long enough to read the capture numbers off the screen, or to get a
+        // screenshot of them. Four seconds was not.
+        duration: const Duration(seconds: 10),
       ),
     );
     setState(() {
@@ -815,7 +819,10 @@ class _ConditionMeasurementScreenState
           child: Text(
             'Y ${y.toStringAsFixed(0)} · 붉은기 ${_ppgService.debugDiff.toStringAsFixed(0)}'
             ' · V ${_ppgService.debugAvgV.toStringAsFixed(0)}'
-            ' · 고른정도 ${evenness.toStringAsFixed(2)}',
+            ' · 고른정도 ${evenness.toStringAsFixed(2)}'
+            // Watching this while measuring shows a break the moment it
+            // happens: runs ticks up and the sample count stops climbing.
+            '\n${_ppgService.captureSummary}',
             style: const TextStyle(
               fontFamily: AppFonts.pretendard,
               fontSize: 10,

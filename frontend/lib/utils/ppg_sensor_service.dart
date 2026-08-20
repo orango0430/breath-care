@@ -211,6 +211,22 @@ class PpgSensorService {
   /// The samples to upload. Empty until a finger is detected.
   List<double> get waveform => List.unmodifiable(_longestRun.samples);
 
+  /// What the phone actually collected, in one line, for the retake message.
+  ///
+  /// The person who can retry a failed measurement is holding a phone with no
+  /// debugger attached, and "신호 품질이 낮습니다" gives them nothing to act on
+  /// and us nothing to diagnose with. These four numbers say which of the
+  /// server's gates the reading could not clear:
+  ///
+  /// - `n` below `fps × 18` never had a chance on length alone
+  /// - `fps` at exactly 10 means the real rate was lower and got clamped
+  /// - `runs` above 1 means contact broke, so only a fragment was sent
+  String get captureSummary {
+    final total = _runs.fold<int>(0, (sum, run) => sum + run.samples.length);
+    return 'n=${waveform.length}/$total fps=$capturedFps '
+        '${capturedDurationSec}s runs=${_runs.length}';
+  }
+
   /// Seconds of actual contact behind [waveform].
   ///
   /// Not wall-clock: the countdown pauses whenever the finger lifts, so a
@@ -428,13 +444,18 @@ class PpgSensorService {
       final now = DateTime.now();
       _ppgValueController.add(avgY);
 
-      // A gap wider than this means frames stopped arriving — the camera
-      // stalled, or the app was backgrounded. The samples either side are not
-      // adjacent in time, so start a new run rather than counting the gap.
+      // A gap this wide is not a slow frame — the camera stalled or the app
+      // went to the background, and the samples either side are not adjacent
+      // in time. Start a new run rather than counting the gap.
+      //
+      // The bar is deliberately high. Splitting on every hiccup chops a good
+      // measurement into pieces, and only the longest piece is uploaded, so an
+      // over-eager split fails the reading outright. A whole second is long
+      // enough that no frame rate we accept (10 fps and up) can produce it.
       final since = _lastSampleAt == null
           ? 0
           : now.difference(_lastSampleAt!).inMilliseconds;
-      if (since >= 400) {
+      if (since >= 1000) {
         _startNewRun();
       } else if (since > 0) {
         _current.millis += since;
