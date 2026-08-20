@@ -361,7 +361,8 @@ class PpgSensorService {
     }
 
     // Convert YUV to true RGB Red channel intensity (Y + 1.402 * (V - 128))
-    final redValue = (avgY + 1.402 * (avgV - 128.0)).clamp(0.0, 255.0);
+    // Invert signal (255 - red) so cardiac blood surge corresponds to positive pulse peak
+    final redValue = (255.0 - (avgY + 1.402 * (avgV - 128.0))).clamp(0.0, 255.0);
 
     if (isFingerDetected && !_ppgValueController.isClosed && !_isDisposed) {
       final now = DateTime.now();
