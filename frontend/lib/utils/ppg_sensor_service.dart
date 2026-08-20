@@ -279,6 +279,9 @@ class PpgSensorService {
     }
   }
 
+  int _fingerOnFrames = 0;
+  int _fingerOffFrames = 0;
+
   /// Process individual camera frame image with Bulletproof YUV Finger Contact Detection
   void _processCameraFrame(CameraImage image) {
     if (_isDisposed || _cameraController == null) return;
@@ -349,12 +352,27 @@ class PpgSensorService {
     debugAvgV = avgV;
     debugDiff = chromDiff;
 
-    // Robust Finger Contact Condition across all Android cameras:
-    // Finger covering torch LED yields higher V than U (red channel predominance)
-    final detected = (chromDiff > 15.0 && avgV > 125.0) || (avgY > 80.0 && chromDiff > 10.0) || kIsWeb;
+    // Bulletproof Finger Contact Condition across all Android cameras:
+    // Finger covering torch LED yields strong V chrominance over U without room light false positives
+    final detected = (chromDiff > 18.0 && avgV > 130.0) || kIsWeb;
 
-    if (detected != isFingerDetected) {
-      isFingerDetected = detected;
+    if (detected) {
+      _fingerOnFrames++;
+      _fingerOffFrames = 0;
+    } else {
+      _fingerOffFrames++;
+      _fingerOnFrames = 0;
+    }
+
+    bool nextState = isFingerDetected;
+    if (_fingerOnFrames >= 3) {
+      nextState = true;
+    } else if (_fingerOffFrames >= 3) {
+      nextState = false;
+    }
+
+    if (nextState != isFingerDetected) {
+      isFingerDetected = nextState;
       if (!_fingerStateController.isClosed && !_isDisposed) {
         _fingerStateController.add(isFingerDetected);
       }
