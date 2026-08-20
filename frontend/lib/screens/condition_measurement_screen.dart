@@ -340,15 +340,67 @@ class _ConditionMeasurementScreenState
         conditionScore: measurement.conditionScore,
         quality: measurement.quality.name.toUpperCase(),
       ));
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      // 백엔드 서버 미연결/응답 실패 시에도 측정이 끊기지 않도록 실측 PPG 수치로 바로 결과 화면 진입
-      final computed = _ppgService.computeResults();
-      final res = computed.bpm > 0
-          ? computed
-          : PpgMeasurementResult.randomSample();
-      _applyResult(res);
+      // 서버 연결 필수: 서버 연동 실패 시 결과 화면으로 진입하지 않고 에러 안내 후 측정 재시도 유도
+      _showServerConnectionErrorDialog();
     }
+  }
+
+  void _showServerConnectionErrorDialog() {
+    setState(() {
+      _status = MeasurementStatus.waiting;
+      _secondsLeft = 20;
+      _progress = 0.0;
+      _lastResult = null;
+      _recommendedRoutine = null;
+    });
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.darkCharcoal,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          '서버 연결 실패',
+          style: TextStyle(
+            fontFamily: AppFonts.pretendard,
+            fontSize: 18,
+            fontWeight: FontWeight.w400,
+            color: AppColors.white,
+          ),
+        ),
+        content: const Text(
+          '백엔드 서버와 통신할 수 없습니다.\n서버 상태 및 네트워크 연결을 확인한 후 다시 시도해 주세요.',
+          style: TextStyle(
+            fontFamily: AppFonts.pretendard,
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: AppColors.lightGray,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.lightMint,
+              foregroundColor: AppColors.darkBg,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              '확인',
+              style: TextStyle(
+                fontFamily: AppFonts.pretendard,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _applyResult(PpgMeasurementResult result) {
