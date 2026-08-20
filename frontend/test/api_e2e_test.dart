@@ -10,7 +10,9 @@ import 'package:breath_care/services/api_config.dart';
 import 'package:breath_care/services/api_exception.dart';
 import 'package:breath_care/services/auth_service.dart';
 import 'package:breath_care/services/calendar_service.dart';
+import 'package:breath_care/models/session.dart';
 import 'package:breath_care/services/measurement_service.dart';
+import 'package:breath_care/services/session_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -189,6 +191,96 @@ void main() {
           .having((e) => e.code, 'code', ApiException.unauthorized)),
     );
   }, timeout: const Timeout(Duration(seconds: 60)));
+
+  test('호흡 세션이 전후 측정을 묶고 변화량을 돌려준다', () async {
+    await AuthService.instance
+        .signup(email: email, password: 'password123', nickname: '세션');
+    await AuthService.instance.login(email: email, password: 'password123');
+
+    final before = await MeasurementService.instance.submit(
+      samples: _pulseWave(bpm: 78, fps: fps, durationSec: durationSec),
+      fps: fps,
+      durationSec: durationSec,
+    );
+
+    final session = await SessionService.instance.start(
+      preMeasurementId: before.id,
+      preset: BreathingPreset.fourSevenEight,
+    );
+    expect(session.isCompleted, isFalse, reason: '시작 직후에는 아직 안 끝난 세션이다');
+    expect(session.change, isNull);
+
+    // 호흡 뒤 느려진 맥박.
+    final after = await MeasurementService.instance.submit(
+      samples: _pulseWave(bpm: 64, fps: fps, durationSec: durationSec),
+      fps: fps,
+      durationSec: durationSec,
+    );
+
+    final done = await SessionService.instance
+        .complete(sessionId: session.id, postMeasurementId: after.id);
+
+    expect(done.isCompleted, isTrue);
+    expect(done.duration, isNotNull);
+    // 78 → 64로 넣었으니 서버가 내려간 폭을 음수로 돌려줘야 한다.
+    expect(done.change?.hr, lessThan(0));
+    expect(done.before?.hr, closeTo(78, 5));
+    expect(done.after?.hr, closeTo(64, 5));
+
+    final history = await SessionService.instance.history();
+    expect(history.map((s) => s.id), contains(done.id));
+  }, timeout: const Timeout(Duration(seconds: 120)));
+
+  test('이미 끝난 세션은 다시 끝낼 수 없다', () async {
+    await AuthService.instance
+        .signup(email: email, password: 'password123', nickname: '중복');
+    await AuthService.instance.login(email: email, password: 'password123');
+
+    final before = await MeasurementService.instance.submit(
+      samples: _pulseWave(bpm: 72, fps: fps, durationSec: durationSec),
+      fps: fps,
+      durationSec: durationSec,
+    );
+    final session =
+        await SessionService.instance.start(preMeasurementId: before.id);
+    await SessionService.instance
+        .complete(sessionId: session.id, postMeasurementId: before.id);
+
+    // 타임아웃 뒤 무턱대고 재시도하면 안 되는 이유.
+    expect(
+      () => SessionService.instance
+          .complete(sessionId: session.id, postMeasurementId: before.id),
+      throwsA(isA<ApiException>()
+          .having((e) => e.code, 'code', 'SESSION_ALREADY_COMPLETED')),
+    );
+  }, timeout: const Timeout(Duration(seconds: 120)));
+
+  test('일정 완료 체크가 서버에 남고 해제도 된다', () async {
+    await AuthService.instance
+        .signup(email: email, password: 'password123', nickname: '완료');
+    await AuthService.instance.login(email: email, password: 'password123');
+
+    final created = await CalendarService.instance.create(
+      title: '완료 체크 대상',
+      eventType: EventType.exam,
+      startAt: DateTime.now().add(const Duration(days: 2)),
+    );
+    expect(created.completed, isFalse, reason: '새 일정은 완료가 아니다');
+
+    final ticked = await CalendarService.instance.setCompleted(created.id, true);
+    expect(ticked.completed, isTrue);
+
+    // 화면을 다시 그릴 때 서버에서 읽어오는 값이 진짜인지.
+    final reread = await CalendarService.instance.events(
+      from: DateTime.now().subtract(const Duration(days: 1)),
+      to: DateTime.now().add(const Duration(days: 5)),
+    );
+    expect(reread.firstWhere((e) => e.id == created.id).completed, isTrue);
+
+    final cleared =
+        await CalendarService.instance.setCompleted(created.id, false);
+    expect(cleared.completed, isFalse);
+  }, timeout: const Timeout(Duration(seconds: 120)));
 
   test('서버 주소가 https인지 확인 — 평문이면 릴리즈 APK에서 차단된다', () {
     expect(ApiConfig.baseUrl, startsWith('https://'),
