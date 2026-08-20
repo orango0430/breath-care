@@ -72,16 +72,43 @@ public class PpgSignalProcessor implements SignalProcessor {
      *
      * <p>기준이 바뀌었으니 배수도 다르다. RMS 시절의 0.7과 비교하지 말 것. [튜닝 대상]
      */
-    private static final double PEAK_THRESHOLD_RATIO = 1.4;
+    /// 1.4에서 내렸다. 실기기 파형은 봉우리 높이가 박동마다 고르지 않아서, 문턱이
+    /// 조금만 높아도 작은 박동이 통째로 안 잡히고 "피크부족"으로 떨어진다. 낮추면
+    /// 없는 봉우리를 주울 위험이 있지만, 그건 뒤의 불응기와 간격 이상치 제거가
+    /// 한 번 더 거른다. 못 잡은 박동은 되살릴 방법이 없다.
+    private static final double PEAK_THRESHOLD_RATIO = 1.25;
 
-    /** RR 간격이 중앙값에서 이 비율 이상 벗어나면 버린다. 움직임 때문에 튄 것으로 본다. [튜닝 대상] */
+    /**
+     * RR 간격이 중앙값에서 이 비율 이상 벗어나면 버린다. 움직임 때문에 튄 것으로 본다.
+     *
+     * <p><b>이 값은 함부로 올리면 안 된다.</b> 품질 등급이 "몇 개나 버렸는가"로 계산되기
+     * 때문에, 여기를 느슨하게 하면 버려지는 게 줄어 잡음까지 양호로 보인다. 실제로
+     * 0.45로 올렸더니 순수 잡음이 POOR에서 FAIR로 올라섰다. 통과를 넉넉하게 하고
+     * 싶으면 아래 개수·비율 쪽을 건드려야 한다. [튜닝 대상]
+     */
     private static final double MAX_RR_DEVIATION = 0.3;
 
-    /** 이 개수보다 적게 남으면 HRV를 낼 수 없다. 20초·72bpm이면 23개쯤 나온다. */
-    private static final int MIN_INTERVALS = 8;
+    /**
+     * 이 개수보다 적게 남으면 HRV를 낼 수 없다.
+     *
+     * <p>20초·72bpm이면 23개쯤 나온다. 8을 요구하면 셋 중 하나만 남아도 되는 셈이라
+     * 넉넉해 보이지만, 피크를 절반 놓치는 상황과 겹치면 바로 걸린다. 6이면 HR 평균은
+     * 충분히 안정적이고 HRV도 대략은 낸다 — 정확도가 떨어지는 건 품질 등급으로 알린다.
+     */
+    private static final int MIN_INTERVALS = 6;
 
-    /** 버려진 RR 비율이 이보다 크면 POOR, 그 아래 FAIR_REJECT_RATIO보다 크면 FAIR. */
-    private static final double POOR_REJECT_RATIO = 0.3;
+    /**
+     * 버려진 RR 비율이 이보다 크면 POOR, 그 아래 FAIR_REJECT_RATIO보다 크면 FAIR.
+     *
+     * <p>POOR는 측정을 통째로 버리고 다시 재라는 뜻이라 문턱이 높아야 한다. 0.3에서
+     * 올렸다 — 3할쯤 버려진 신호는 숫자를 내되 FAIR로 표시하는 편이, 재측정을
+     * 반복시키는 것보다 쓸모 있다.
+     *
+     * <p>FAIR 문턱은 건드리지 않았다. GOOD과 FAIR을 가르는 선일 뿐 통과 여부와는
+     * 무관해서 풀어도 얻는 게 없고, 올렸더니 4초간 크게 흔들린 측정까지 GOOD으로
+     * 올라섰다. 흔들린 건 흔들렸다고 말해야 한다.
+     */
+    private static final double POOR_REJECT_RATIO = 0.4;
     private static final double FAIR_REJECT_RATIO = 0.1;
 
     @Override
