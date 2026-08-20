@@ -309,12 +309,6 @@ class BreathingFeedbackScreen extends StatelessWidget {
       height: 52,
       child: ElevatedButton(
         onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('호흡 운동 기록이 저장되었습니다!'),
-              duration: Duration(seconds: 2),
-            ),
-          );
           // Pop to root home screen
           Navigator.of(context).popUntil((route) => route.isFirst);
         },
