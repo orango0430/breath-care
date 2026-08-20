@@ -785,11 +785,45 @@ class _ConditionMeasurementScreenState
                     color: AppColors.white,
                   ),
                 ),
+                // The raw numbers behind the contact test.
+                //
+                // On a phone there is no logcat to read, and "신호가 약해요"
+                // gives nothing to act on — these three values say exactly
+                // which of the three conditions is failing, so a threshold can
+                // be set from a real fingertip instead of a guess.
+                if (isMeasuring) _buildSignalDebugLine(),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  /// Live contact-test values, refreshed with the waveform animation.
+  ///
+  /// Reads: 밝기 / 붉은기 / 고른정도. Contact needs 붉은기 > 20, 밝기 지수 > 132
+  /// and 고른정도 < 0.28 at the same time.
+  Widget _buildSignalDebugLine() {
+    return AnimatedBuilder(
+      animation: _waveAnimationController,
+      builder: (context, _) {
+        final y = _ppgService.debugAvgY;
+        final evenness = y <= 0 ? 0.0 : _ppgService.debugSpread / y;
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            'Y ${y.toStringAsFixed(0)} · 붉은기 ${_ppgService.debugDiff.toStringAsFixed(0)}'
+            ' · V ${_ppgService.debugAvgV.toStringAsFixed(0)}'
+            ' · 고른정도 ${evenness.toStringAsFixed(2)}',
+            style: const TextStyle(
+              fontFamily: AppFonts.pretendard,
+              fontSize: 10,
+              color: AppColors.slateGray,
+            ),
+          ),
+        );
+      },
     );
   }
 

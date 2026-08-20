@@ -21,10 +21,11 @@ void main() {
     required double diff,
     required double v,
     required double spread,
+    double y = 200,
     int frames = 15,
   }) {
     for (var i = 0; i < frames; i++) {
-      s.updateFingerState(diff, v, spread);
+      s.updateFingerState(diff, v, spread, y);
     }
   }
 
@@ -43,9 +44,18 @@ void main() {
 
   test('방 안 풍경은 붉은기가 있어도 인식되지 않는다', () {
     // Emulator's rendered room, measured: colour alone passes, structure does
-    // not. Without the spread test this counted down with no finger present.
-    feed(service, diff: 22.3, v: 140, spread: 45.0, frames: 60);
+    // not. Without the evenness test this counted down with no finger present.
+    feed(service, diff: 22.3, v: 140, spread: 45.0, y: 104, frames: 60);
     expect(service.isFingerDetected, isFalse);
+  });
+
+  test('토치에 눈부신 손가락도 인식된다', () {
+    // The case an absolute spread limit got wrong. A finger right against the
+    // torch is bright and blows out in the middle, so the raw spread lands in
+    // the forties — the same figure as the emulator's room, at more than twice
+    // the brightness. Only the ratio tells them apart.
+    feed(service, diff: 40, v: 175, spread: 44.0, y: 230);
+    expect(service.isFingerDetected, isTrue);
   });
 
   test('렌즈를 가리지 않으면 인식되지 않는다', () {

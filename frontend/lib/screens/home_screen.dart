@@ -7,7 +7,6 @@ import '../widgets/bpace_logo.dart';
 import 'log_screen.dart';
 import 'condition_measurement_screen.dart';
 import 'recommended_breathing_screen.dart';
-import 'login_screen.dart';
 import 'my_page_screen.dart';
 import '../models/measurement.dart';
 import '../services/api_client.dart';
@@ -212,37 +211,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Profile Avatar Icon Button
   ///
-  /// Says "로그인" outright when signed out. The app opens straight to this
-  /// screen as a guest, so an unlabelled person icon was the only way in to
-  /// signing up — and nobody reads a grey circle as "create an account".
+  /// Always the avatar, signed in or not — 마이페이지가 로그인·회원가입 입구다.
   Widget _buildProfileAvatar() {
-    if (!ApiClient.instance.isLoggedIn) {
-      return GestureDetector(
-        // Straight to the login screen, not to 마이페이지. A button that says
-        // 로그인 and opens a page titled "My page" reads as the wrong screen,
-        // and the 회원가입 link lives one more tap past that.
-        onTap: _openLogin,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: AppColors.slateDarkGray.withAlpha(150),
-            borderRadius: BorderRadius.circular(19),
-            border: Border.all(color: AppColors.slateDarkGray, width: 1),
-          ),
-          child: const Text(
-            '로그인',
-            style: TextStyle(
-              fontFamily: AppFonts.pretendard,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: AppColors.white,
-            ),
-          ),
-        ),
-      );
-    }
-
     return GestureDetector(
       onTap: _openMyPage,
       child: Container(
@@ -268,8 +238,6 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Opens 마이페이지 and redraws on the way back, so the header flips between
   /// "로그인" and the avatar as soon as the user signs in or out.
   Future<void> _openMyPage() => _pushAndRefresh(const MyPageScreen());
-
-  Future<void> _openLogin() => _pushAndRefresh(const LoginScreen());
 
   /// Signing in changes what every card on this screen should show, so the
   /// data is refetched on the way back rather than left stale.

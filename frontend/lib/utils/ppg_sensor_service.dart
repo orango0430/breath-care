@@ -390,7 +390,7 @@ class PpgSensorService {
       }
     }
 
-    updateFingerState(chromDiff, avgV, spread);
+    updateFingerState(chromDiff, avgV, spread, avgY);
 
     if (isFingerDetected && !_ppgValueController.isClosed && !_isDisposed) {
       final now = DateTime.now();
@@ -452,7 +452,8 @@ class PpgSensorService {
   /// samples are only kept while contact holds, the waveform came out full of
   /// holes — which the server sees as a broken pulse and rejects.
   @visibleForTesting
-  void updateFingerState(double chromDiff, double avgV, double spread) {
+  void updateFingerState(
+      double chromDiff, double avgV, double spread, double avgY) {
     if (kIsWeb) {
       if (!isFingerDetected) _setFingerDetected(true);
       return;
@@ -466,14 +467,19 @@ class PpgSensorService {
     // while any real view has edges and shading. On the emulator, whose fake
     // camera renders a furnished room, colour alone latched on with no finger
     // anywhere near the device.
-    // 32 sits between the two cases with room on both sides: a covered lens
-    // measures well under 20, and the emulator's rendered room — the softest,
-    // least textured scene anything is likely to see — measured 45.
-    final looksLikeSkin = chromDiff > 20.0 && avgV > 132.0 && spread < 32.0;
-    // Deliberately lower than the entry bar. Once contact is established, a
+    //
+    // The evenness test is a ratio, not a raw spread. A finger lit by the torch
+    // is *bright*, and brightness scales the spread with it — the middle of the
+    // frame is blown out while the edges fall away, so a perfectly good reading
+    // can measure a raw spread in the forties. Dividing by the mean cancels
+    // that out: the emulator's room sits at 0.43 (45 over 104) while a covered
+    // lens stays well under 0.2 however bright it is.
+    final evenness = avgY <= 0 ? 1.0 : spread / avgY;
+    final looksLikeSkin = chromDiff > 20.0 && avgV > 132.0 && evenness < 0.28;
+    // Deliberately looser than the entry bar. Once contact is established, a
     // momentary dip from pressure or a shifting finger should not throw away
     // the measurement in progress.
-    final clearlyGone = chromDiff < 12.0 || avgV < 122.0 || spread > 50.0;
+    final clearlyGone = chromDiff < 12.0 || avgV < 122.0 || evenness > 0.45;
 
     if (!isFingerDetected) {
       _contactFrames = looksLikeSkin ? _contactFrames + 1 : 0;
