@@ -106,8 +106,12 @@ public class PpgSignalProcessor implements SignalProcessor {
         boolean[] kept = markUsable(intervals);
         int keptCount = countTrue(kept);
         if (keptCount < MIN_INTERVALS) {
-            return SignalResult.poor("간격이상 %d/%d 남음 중앙값=%.0fms"
-                    .formatted(keptCount, intervals.length, median(intervals)));
+            // 버려진 간격이 중앙값의 2배 근처면 박동을 놓친 것(임계값이 높다)이고,
+            // 짧거나 제각각이면 없는 피크를 잡은 것(임계값이 낮다)이다. 원인이 정반대라
+            // 최소·최대를 같이 봐야 어느 쪽인지 갈린다.
+            return SignalResult.poor("간격이상 %d/%d 중앙%.0f 최소%.0f 최대%.0f"
+                    .formatted(keptCount, intervals.length, median(intervals),
+                            min(intervals), max(intervals)));
         }
 
         double meanRr = mean(intervals, kept);
@@ -383,6 +387,22 @@ public class PpgSignalProcessor implements SignalProcessor {
             sum += value * value;
         }
         return values.length == 0 ? 0 : Math.sqrt(sum / values.length);
+    }
+
+    private double min(double[] values) {
+        double smallest = Double.MAX_VALUE;
+        for (double value : values) {
+            smallest = Math.min(smallest, value);
+        }
+        return values.length == 0 ? 0 : smallest;
+    }
+
+    private double max(double[] values) {
+        double largest = 0;
+        for (double value : values) {
+            largest = Math.max(largest, value);
+        }
+        return largest;
     }
 
     private double median(double[] values) {
