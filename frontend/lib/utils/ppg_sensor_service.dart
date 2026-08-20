@@ -176,20 +176,40 @@ class PpgSensorService {
   final List<double> _rrIntervalsMs = [];
   Timer? _simulationTimer;
 
-  /// Every avgY sample taken while a finger was on the lens, in order.
+  /// One unbroken stretch of contact, and the time it took.
   ///
-  /// This is what gets uploaded — the server derives heart rate and HRV from
-  /// it. Keep it raw: no smoothing, no trimming. The server's filter expects
-  /// the untouched signal, and the stored copy is what we replay later when
-  /// tuning the algorithm.
-  final List<double> _waveform = [];
-  /// Milliseconds accumulated across frames, skipping the gaps where contact
-  /// was lost. See [capturedDurationSec].
-  int _capturedMillis = 0;
+  /// Samples are kept raw: no smoothing, no trimming. The server's filter
+  /// expects the untouched signal, and the stored copy is what we replay
+  /// later when tuning the algorithm.
+  final List<_ContactRun> _runs = [_ContactRun()];
   DateTime? _lastSampleAt;
 
+  /// The run currently being filled. Always the last one.
+  _ContactRun get _current => _runs.last;
+
+  /// The longest unbroken run — the one we upload.
+  ///
+  /// Samples either side of a break are **not** adjacent in time, but the
+  /// server reads the array as evenly spaced. Concatenating across a break
+  /// puts a step where no step happened, and a step is exactly what the peak
+  /// detector is built to find: it reads as a giant heartbeat, corrupts the
+  /// intervals around it, and lands in the HRV that the condition score is
+  /// computed from. One 20-second reading with three breaks came back with
+  /// an HRV of 125 ms against a true 31 ms.
+  ///
+  /// So a broken measurement contributes only its best piece. If that piece
+  /// is too short the server says so, which is the honest answer — better
+  /// than a confident number derived from a signal that was never continuous.
+  _ContactRun get _longestRun {
+    var best = _runs.first;
+    for (final run in _runs) {
+      if (run.samples.length > best.samples.length) best = run;
+    }
+    return best;
+  }
+
   /// The samples to upload. Empty until a finger is detected.
-  List<double> get waveform => List.unmodifiable(_waveform);
+  List<double> get waveform => List.unmodifiable(_longestRun.samples);
 
   /// Seconds of actual contact behind [waveform].
   ///
@@ -198,7 +218,7 @@ class PpgSensorService {
   /// waveform would halve the reported frame rate, and the server derives
   /// heart rate straight from that number — a 72 bpm pulse would come back
   /// as 36.
-  int get capturedDurationSec => _capturedMillis ~/ 1000;
+  int get capturedDurationSec => _longestRun.millis ~/ 1000;
 
   /// Frames actually delivered per second, measured rather than assumed.
   ///
@@ -217,8 +237,9 @@ class PpgSensorService {
   /// The same inflation also stretched every interval, skewing the heart rate
   /// by whatever the rounding error happened to be.
   int get capturedFps {
-    if (_capturedMillis <= 0 || _waveform.isEmpty) return 30;
-    final rate = _waveform.length * 1000 / _capturedMillis;
+    final run = _longestRun;
+    if (run.millis <= 0 || run.samples.isEmpty) return 30;
+    final rate = run.samples.length * 1000 / run.millis;
     return rate.round().clamp(10, 240);
   }
 
@@ -239,8 +260,9 @@ class PpgSensorService {
     _yHistory.clear();
     _contactFrames = 0;
     _releaseFrames = 0;
-    _waveform.clear();
-    _capturedMillis = 0;
+    _runs
+      ..clear()
+      ..add(_ContactRun());
     _lastSampleAt = null;
     _prevY = 0.0;
     _prevPrevY = 0.0;
@@ -406,17 +428,22 @@ class PpgSensorService {
       final now = DateTime.now();
       _ppgValueController.add(avgY);
 
-      // A gap wider than this means the finger came off, not a slow frame,
-      // so it does not count toward the measured duration.
+      // A gap wider than this means frames stopped arriving — the camera
+      // stalled, or the app was backgrounded. The samples either side are not
+      // adjacent in time, so start a new run rather than counting the gap.
       final since = _lastSampleAt == null
           ? 0
           : now.difference(_lastSampleAt!).inMilliseconds;
-      if (since > 0 && since < 400) _capturedMillis += since;
+      if (since >= 400) {
+        _startNewRun();
+      } else if (since > 0) {
+        _current.millis += since;
+      }
       _lastSampleAt = now;
       // The server rejects anything past 30,000 samples, so stop growing at the
       // cap instead of building a request that is guaranteed to be refused.
-      if (_waveform.length < 30000) {
-        _waveform.add(avgY);
+      if (_current.samples.length < 30000) {
+        _current.samples.add(avgY);
       }
 
       // Track moving average of avgY
@@ -519,10 +546,25 @@ class PpgSensorService {
   }
 
   void _setFingerDetected(bool detected) {
+    // Losing contact ends the run. Whatever comes back is a separate stretch
+    // of signal, however quickly the finger returns.
+    if (!detected && isFingerDetected) {
+      _startNewRun();
+    }
     isFingerDetected = detected;
     if (!_fingerStateController.isClosed && !_isDisposed) {
       _fingerStateController.add(detected);
     }
+  }
+
+  /// Closes the run in progress and opens a fresh one.
+  ///
+  /// An empty run is reused rather than piling up, so repeated contact loss
+  /// before any sample arrives does not grow the list.
+  void _startNewRun() {
+    if (_current.samples.isEmpty) return;
+    _runs.add(_ContactRun());
+    _lastSampleAt = null;
   }
 
   void _startSimulationFallback() {
@@ -612,4 +654,14 @@ class PpgSensorService {
     if (!_ppgValueController.isClosed) _ppgValueController.close();
     if (!_fingerStateController.isClosed) _fingerStateController.close();
   }
+}
+
+/// One unbroken stretch of contact.
+///
+/// [millis] is the time the samples actually span, summed frame to frame, so
+/// it is the honest denominator for the frame rate. It is not the difference
+/// between the first and last timestamp — that would include any stall.
+class _ContactRun {
+  final List<double> samples = [];
+  int millis = 0;
 }

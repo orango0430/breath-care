@@ -26,11 +26,12 @@ public class MeasurementService {
 
     private final MeasurementRepository measurementRepository;
     private final MeasurementSignalRepository signalRepository;
+    private final RejectedSignalRecorder rejectedSignalRecorder;
     private final SignalProcessor signalProcessor;
 
     @Transactional
     public MeasurementResponse measure(Long userId, MeasurementRequest request) {
-        SignalResult result = process(request.samples(), request.fps(), request.durationSec());
+        SignalResult result = process(userId, request.samples(), request.fps(), request.durationSec());
         Double conditionScore = ConditionScoreCalculator.score(result.hrvSdnn());
 
         Measurement measurement = measurementRepository.save(Measurement.create(
@@ -52,10 +53,12 @@ public class MeasurementService {
      * <p>컨디션 지수는 이번 측정의 HRV만으로 나오므로 과거 이력이 필요 없다.
      * 그래서 비회원도 회원과 똑같은 값을 받는다.
      *
-     * <p>DB를 건드리지 않으므로 트랜잭션도 열지 않는다.
+     * <p>성공한 측정은 아무것도 남기지 않으므로 트랜잭션을 열지 않는다. 거부된 파형만
+     * 예외다 — 그건 {@link RejectedSignalRecorder}가 자기 트랜잭션에서 따로 남긴다.
      */
     public GuestMeasurementResponse analyze(GuestMeasurementRequest request) {
-        SignalResult result = process(request.samples(), request.fps(), request.durationSec());
+        // 비회원이라 붙일 사용자가 없다. 파형 자체는 회원 것과 똑같이 쓸모가 있다.
+        SignalResult result = process(null, request.samples(), request.fps(), request.durationSec());
 
         return new GuestMeasurementResponse(
                 result.hr(), result.hrv(), ConditionScoreCalculator.score(result.hrvSdnn()),
@@ -73,14 +76,16 @@ public class MeasurementService {
      * 품질 검사 + 신호처리. 회원·비회원이 같은 경로를 지난다.
      * 나쁜 데이터로 낸 숫자를 보여주느니 다시 재게 하는 편이 낫다.
      */
-    private SignalResult process(List<Double> samples, int fps, int durationSec) {
+    private SignalResult process(Long userId, List<Double> samples, int fps, int durationSec) {
         if (hasTooFewFrames(samples, fps, durationSec)) {
+            rejectedSignalRecorder.record(userId, fps, durationSec, samples, "TOO_FEW_FRAMES");
             throw new BusinessException(ErrorCode.POOR_SIGNAL_QUALITY,
                     "측정 중 프레임이 많이 누락됐어요. 다시 측정해 주세요.");
         }
 
         SignalResult result = signalProcessor.process(toArray(samples), fps);
         if (!result.isUsable()) {
+            rejectedSignalRecorder.record(userId, fps, durationSec, samples, "POOR_QUALITY");
             throw new BusinessException(ErrorCode.POOR_SIGNAL_QUALITY);
         }
 

@@ -246,6 +246,48 @@ class PpgSignalProcessorTest {
         assertThat(result.hr()).isCloseTo(72.0, within(2.0));
     }
 
+    /**
+     * 20초 중 한 번의 큰 흔들림이 측정 전체를 날려 버리던 버그.
+     *
+     * <p>피크 임계값을 신호 전체의 RMS로 잡던 때, 밝기 255단계 중 36단계짜리 흔들림이
+     * 0.3초만 있어도 RMS가 몇 배로 뛰어 임계값이 진짜 봉우리 전부보다 위로 올라갔다.
+     * 검출 피크가 24개에서 1개로 떨어져 멀쩡한 측정이 통째로 거부됐다. 손가락을 20초
+     * 얹고 있으면 이만한 흔들림은 거의 반드시 한 번은 생기므로, 실기기에서는 사실상
+     * 모든 측정이 실패했다.
+     */
+    @Test
+    @DisplayName("중간에 흔들림이 한 번 크게 들어와도 나머지 구간에서 심박수를 낸다")
+    void survivesASingleLargeTransient() {
+        double[] samples = synthesize(72, 20, 25.0, 7);
+
+        // 10초 지점에서 0.5초 동안 맥동(5.0)의 10배가 실린다.
+        int from = FPS * 10;
+        for (int i = 0; i < FPS / 2; i++) {
+            samples[from + i] += PULSE_AMPLITUDE * 10;
+        }
+
+        SignalResult result = processor.process(samples, FPS);
+
+        assertThat(result.quality()).isNotEqualTo(MeasurementQuality.POOR);
+        assertThat(result.hr()).isCloseTo(72.0, within(3.0));
+    }
+
+    @Test
+    @DisplayName("흔들림이 여러 번이면 여전히 POOR — 진짜 못 쓸 측정은 거부한다")
+    void stillRejectsRepeatedTransients() {
+        double[] samples = synthesize(72, 20, 25.0, 7);
+
+        for (int k = 0; k < 6; k++) {
+            int from = FPS * (2 + k * 3);
+            for (int i = 0; i < FPS; i++) {
+                samples[from + i] += PULSE_AMPLITUDE * 10;
+            }
+        }
+
+        assertThat(processor.process(samples, FPS).quality())
+                .isEqualTo(MeasurementQuality.POOR);
+    }
+
     @Test
     @DisplayName("60fps로 보내도 같은 심박수가 나온다")
     void independentOfFrameRate() {

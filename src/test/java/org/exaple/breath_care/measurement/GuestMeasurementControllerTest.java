@@ -10,6 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -37,6 +39,8 @@ class GuestMeasurementControllerTest {
     MeasurementRepository measurementRepository;
     @Autowired
     MeasurementSignalRepository signalRepository;
+    @Autowired
+    RejectedSignalRepository rejectedSignalRepository;
 
     @Test
     @DisplayName("토큰 없이도 측정 결과를 받는다")
@@ -127,6 +131,38 @@ class GuestMeasurementControllerTest {
                         .content(PpgWaveforms.flatBody(60, 30)))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("POOR_SIGNAL_QUALITY"));
+    }
+
+    /**
+     * 거부된 파형은 남는다. 저장하지 않는 비회원 측정이라도 마찬가지다.
+     *
+     * <p>알고리즘을 고칠 근거는 성공한 측정이 아니라 실패한 측정에서 나온다. 예전에는
+     * 거부가 저장 전에 예외로 끝나 파형이 한 건도 남지 않았고, 그래서 실기기에서 왜
+     * 떨어지는지 매번 추측으로 되짚어야 했다.
+     *
+     * <p>기록은 별도 트랜잭션에서 커밋되므로 이 테스트의 롤백으로 사라지지 않는다.
+     * 직접 지운다.
+     */
+    @Test
+    @DisplayName("거부된 파형은 비회원 측정이어도 남는다")
+    void keepsRejectedWaveforms() throws Exception {
+        long before = rejectedSignalRepository.count();
+
+        mockMvc.perform(post(ANALYZE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(PpgWaveforms.flatBody(60, 30)))
+                .andExpect(status().isUnprocessableContent());
+
+        List<RejectedSignal> kept = rejectedSignalRepository.findAll();
+        assertThat(kept).hasSize((int) before + 1);
+
+        RejectedSignal recorded = kept.get(kept.size() - 1);
+        assertThat(recorded.getUserId()).isNull();
+        assertThat(recorded.getReason()).isEqualTo("POOR_QUALITY");
+        assertThat(recorded.getSampleCount()).isEqualTo(60 * 30);
+        assertThat(recorded.getSamples()).isNotBlank();
+
+        rejectedSignalRepository.deleteById(recorded.getId());
     }
 
     @Test

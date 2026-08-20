@@ -62,10 +62,17 @@ public class PpgSignalProcessor implements SignalProcessor {
     private static final double MIN_PERFUSION = 0.001;
 
     /**
-     * 피크 임계값. 필터링된 신호의 RMS에 이 배수를 곱한다.
-     * 진폭 A인 정현파의 RMS는 0.707A라, 0.7이면 임계값이 약 0.5A가 된다. [튜닝 대상]
+     * 피크 임계값. 신호의 <b>대표 진폭</b>에 이 배수를 곱한다.
+     *
+     * <p>대표 진폭을 RMS가 아니라 중앙값으로 잡는다. RMS는 큰 값 하나에 통째로 끌려간다.
+     * 20초 중 0.3초짜리 흔들림 한 번이면 — 손가락을 고쳐 쥐거나 압력이 변하면 늘 생기는
+     * 크기다 — RMS가 몇 배로 뛰고 임계값이 진짜 맥박 봉우리 전부보다 위로 올라간다.
+     * 실제로 밝기 255단계 중 36단계짜리 흔들림 하나에 검출 피크가 24개에서 1개로
+     * 떨어져 멀쩡한 측정이 통째로 거부됐다. 중앙값은 그런 값 하나에 꿈쩍하지 않는다.
+     *
+     * <p>기준이 바뀌었으니 배수도 다르다. RMS 시절의 0.7과 비교하지 말 것. [튜닝 대상]
      */
-    private static final double PEAK_THRESHOLD_RATIO = 0.7;
+    private static final double PEAK_THRESHOLD_RATIO = 1.4;
 
     /** RR 간격이 중앙값에서 이 비율 이상 벗어나면 버린다. 움직임 때문에 튄 것으로 본다. [튜닝 대상] */
     private static final double MAX_RR_DEVIATION = 0.3;
@@ -180,7 +187,7 @@ public class PpgSignalProcessor implements SignalProcessor {
      * 불응기 안에서 더 큰 봉우리가 나오면 앞의 것을 그것으로 교체한다.
      */
     private double[] detectPeaks(double[] filtered, int fps) {
-        double threshold = PEAK_THRESHOLD_RATIO * rms(filtered);
+        double threshold = PEAK_THRESHOLD_RATIO * typicalAmplitude(filtered);
         int refractory = Math.max(1, (int) Math.round(fps * 60.0 / MAX_BPM));
 
         double[] positions = new double[filtered.length];
@@ -336,6 +343,27 @@ public class PpgSignalProcessor implements SignalProcessor {
             }
         }
         return count == 0 ? 0 : sum / count;
+    }
+
+    /**
+     * 신호의 대표 진폭. 절대값의 중앙값을 쓴다.
+     *
+     * <p>평균이나 RMS를 쓰지 않는 이유는 이 값이 <b>임계값의 기준</b>이기 때문이다.
+     * 20초 중 0.3초가 크게 튀면 RMS는 몇 배가 되지만 중앙값은 거의 그대로다. 임계값은
+     * 나머지 19.7초의 맥박을 잡으라고 있는 것이므로, 튄 구간이 기준을 정하면 안 된다.
+     *
+     * <p>맥박 파형은 대부분의 시간을 0 근처에서 보내고 봉우리에서만 커진다. 그래서
+     * 중앙값은 봉우리 높이보다 한참 작고, 위 배수는 그 점을 감안한 값이다.
+     */
+    private double typicalAmplitude(double[] values) {
+        if (values.length == 0) {
+            return 0;
+        }
+        double[] magnitudes = new double[values.length];
+        for (int i = 0; i < values.length; i++) {
+            magnitudes[i] = Math.abs(values[i]);
+        }
+        return median(magnitudes);
     }
 
     private double rms(double[] values) {
