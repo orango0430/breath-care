@@ -310,12 +310,6 @@ class PpgSensorService {
 
       await _cameraController!.initialize();
 
-      try {
-        await _cameraController!.setFlashMode(FlashMode.torch);
-      } catch (e) {
-        debugPrint('Flash torch not supported on device: $e');
-      }
-
       // Focus only. Autofocus hunts against a lens with a finger pressed to it
       // and never settles, and nothing about a covered lens needs refocusing.
       //
@@ -335,6 +329,21 @@ class PpgSensorService {
 
       _isCameraAvailable = true;
       await _cameraController!.startImageStream(_processCameraFrame);
+
+      // The torch goes on **after** the stream is running, and again a moment
+      // later.
+      //
+      // Starting an image stream rebuilds the Android capture session, and the
+      // rebuild drops the flash. Setting it beforehand — which is what this
+      // did — leaves the lamp off for the whole measurement. With a finger
+      // sealing the lens there is then no light at all, and every frame comes
+      // back black: the waveform uploaded as 599 samples of `0.0` and the
+      // server rightly called it "관류부족 0.00000".
+      //
+      // The second attempt covers devices that reconfigure once more as the
+      // first frames arrive.
+      await _enableTorch();
+      Future<void>.delayed(const Duration(milliseconds: 700), _enableTorch);
     } catch (e) {
       debugPrint('Camera initialization error: $e');
       // Only fake a pulse where there is no camera to begin with. On a real
@@ -535,11 +544,18 @@ class PpgSensorService {
     // finger cleared by a hundredth, so contact flickered frame to frame and
     // the measurement never held.
     final evenness = avgY <= 0 ? 1.0 : spread / avgY;
-    final looksLikeSkin = chromDiff > 35.0 && avgV > 150.0 && evenness < 0.45;
+    // Brightness has to be there at all. A finger lit by the torch is bright;
+    // a dark frame is not a finger, it is a lens in the dark. Without this the
+    // app happily counted down against black frames and uploaded a waveform
+    // of zeros — the server had to be the one to notice, twenty seconds later.
+    final litUp = avgY > 25.0;
+    final looksLikeSkin =
+        litUp && chromDiff > 35.0 && avgV > 150.0 && evenness < 0.45;
     // Deliberately looser than the entry bar. Once contact is established, a
     // momentary dip from pressure or a shifting finger should not throw away
     // the measurement in progress.
-    final clearlyGone = chromDiff < 20.0 || avgV < 135.0 || evenness > 0.60;
+    final clearlyGone =
+        avgY < 15.0 || chromDiff < 20.0 || avgV < 135.0 || evenness > 0.60;
 
     if (!isFingerDetected) {
       _contactFrames = looksLikeSkin ? _contactFrames + 1 : 0;
@@ -556,6 +572,16 @@ class PpgSensorService {
     if (_releaseFrames >= 10) {
       _contactFrames = 0;
       _setFingerDetected(false);
+    }
+  }
+
+  /// Turns the torch on, quietly. Safe to call more than once.
+  Future<void> _enableTorch() async {
+    if (_isDisposed || _cameraController == null) return;
+    try {
+      await _cameraController!.setFlashMode(FlashMode.torch);
+    } catch (e) {
+      debugPrint('Flash torch unavailable: $e');
     }
   }
 

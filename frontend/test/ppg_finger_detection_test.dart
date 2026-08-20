@@ -68,6 +68,24 @@ void main() {
     expect(service.isFingerDetected, isTrue);
   });
 
+  test('토치가 꺼져 깜깜하면 인식되지 않는다', () {
+    // The failure that cost a day. The torch was being switched on before the
+    // image stream started, and starting the stream turned it back off, so a
+    // finger sealing the lens left every frame black. Detection latched on it
+    // anyway and 20 seconds of zeros went to the server as a waveform.
+    feed(service, diff: 40, v: 160, spread: 1, y: 3, frames: 60);
+    expect(service.isFingerDetected, isFalse);
+  });
+
+  test('측정 중 깜깜해지면 인식이 풀린다', () {
+    feed(service, diff: 97, v: 245, spread: 43, y: 160);
+    expect(service.isFingerDetected, isTrue);
+
+    feed(service, diff: 40, v: 160, spread: 1, y: 3, frames: 15);
+    expect(service.isFingerDetected, isFalse,
+        reason: '깜깜해진 뒤로도 붙어 있으면 0으로 가득 찬 파형을 올리게 된다');
+  });
+
   test('렌즈를 가리지 않으면 인식되지 않는다', () {
     feed(service, diff: 3, v: 128, spread: 55);
     expect(service.isFingerDetected, isFalse);
