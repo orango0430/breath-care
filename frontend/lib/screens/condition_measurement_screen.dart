@@ -402,14 +402,14 @@ class _ConditionMeasurementScreenState
       },
       child: Scaffold(
         backgroundColor: AppColors.darkBg,
-        body: SafeArea(
-          child: ResponsiveContainer(
-            maxWidth: 600,
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: Stack(
-              children: [
-                // Main Measurement Screen Body
-                Column(
+        body: Stack(
+          children: [
+            // Main Measurement Screen Body inside SafeArea & ResponsiveContainer
+            SafeArea(
+              child: ResponsiveContainer(
+                maxWidth: 600,
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Column(
                   children: [
                     const SizedBox(height: 12),
                     // Header Row: Back Arrow + Guide Icon
@@ -507,15 +507,15 @@ class _ConditionMeasurementScreenState
                     ),
                   ],
                 ),
-
-                // Preparation Guide Sheet Modal Overlay (컨디션 측정_측정 전)
-                if (_showGuideSheet) _buildPreparationGuideOverlay(),
-
-                // Quit Confirmation Modal Overlay ("측정을 그만두시겠어요?")
-                if (_showQuitDialog) _buildQuitDialogOverlay(),
-              ],
+              ),
             ),
-          ),
+
+            // Preparation Guide Sheet Modal Overlay (Full Edge-to-Edge)
+            if (_showGuideSheet) _buildPreparationGuideOverlay(),
+
+            // Quit Confirmation Modal Overlay ("측정을 그만두시겠어요?" Full Edge-to-Edge Backdrop)
+            if (_showQuitDialog) _buildQuitDialogOverlay(),
+          ],
         ),
       ),
     );
