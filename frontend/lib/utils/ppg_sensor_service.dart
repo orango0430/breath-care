@@ -355,18 +355,18 @@ class PpgSensorService {
 
     if (isFingerDetected && !_ppgValueController.isClosed && !_isDisposed) {
       final now = DateTime.now();
-      _ppgValueController.add(avgY);
+      _ppgValueController.add(avgV);
 
       _captureStartedAt ??= now;
       _captureEndedAt = now;
       // The server rejects anything past 30,000 samples, so stop growing at the
       // cap instead of building a request that is guaranteed to be refused.
       if (_waveform.length < 30000) {
-        _waveform.add(avgY);
+        _waveform.add(avgV);
       }
 
-      // Track moving average of avgY
-      _yHistory.add(avgY);
+      // Track moving average of avgV
+      _yHistory.add(avgV);
       if (_yHistory.length > 20) _yHistory.removeAt(0);
       final movingAvgY =
           _yHistory.reduce((a, b) => a + b) / _yHistory.length;
