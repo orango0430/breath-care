@@ -82,7 +82,7 @@ void main() {
 
     final history = await MeasurementService.instance.history();
     expect(history, hasLength(1));
-    expect(history.first.id, measurement.id);
+    expect(history.first.id, measurement.id!);
   }, timeout: const Timeout(Duration(seconds: 90)));
 
   test('맥동 없는 신호는 POOR_SIGNAL_QUALITY로 돌아온다', () async {
@@ -205,7 +205,7 @@ void main() {
     );
 
     final session = await SessionService.instance.start(
-      preMeasurementId: before.id,
+      preMeasurementId: before.id!,
       preset: BreathingPreset.fourSevenEight,
     );
     expect(session.isCompleted, isFalse, reason: '시작 직후에는 아직 안 끝난 세션이다');
@@ -219,7 +219,7 @@ void main() {
     );
 
     final done = await SessionService.instance
-        .complete(sessionId: session.id, postMeasurementId: after.id);
+        .complete(sessionId: session.id, postMeasurementId: after.id!);
 
     expect(done.isCompleted, isTrue);
     expect(done.duration, isNotNull);
@@ -243,14 +243,14 @@ void main() {
       durationSec: durationSec,
     );
     final session =
-        await SessionService.instance.start(preMeasurementId: before.id);
+        await SessionService.instance.start(preMeasurementId: before.id!);
     await SessionService.instance
-        .complete(sessionId: session.id, postMeasurementId: before.id);
+        .complete(sessionId: session.id, postMeasurementId: before.id!);
 
     // 타임아웃 뒤 무턱대고 재시도하면 안 되는 이유.
     expect(
       () => SessionService.instance
-          .complete(sessionId: session.id, postMeasurementId: before.id),
+          .complete(sessionId: session.id, postMeasurementId: before.id!),
       throwsA(isA<ApiException>()
           .having((e) => e.code, 'code', 'SESSION_ALREADY_COMPLETED')),
     );
@@ -321,6 +321,24 @@ void main() {
     final again = await ReportService.instance.weekly();
     expect(again?.summary, report.summary);
   }, timeout: const Timeout(Duration(seconds: 180)));
+
+  test('비회원 측정 응답이 id 없이도 파싱된다', () async {
+    await ApiClient.instance.setToken(null);
+
+    // 이 응답에는 id가 없다. 저장하지 않는 분석이라 참조할 대상이 없기 때문이다.
+    // 모델이 id를 필수로 받고 있어서, 성공한 비회원 측정마다 파싱에서 타입 오류가
+    // 났다. 그 예외는 ApiException이 아니라 재측정 처리에도 안 걸렸고, 서버는 200을
+    // 준 채로 화면만 "분석 중"에 멈춰 있었다.
+    final result = await MeasurementService.instance.analyzeAsGuest(
+      samples: _pulseWave(bpm: 70, fps: fps, durationSec: durationSec),
+      fps: fps,
+      durationSec: durationSec,
+    );
+
+    expect(result.id, isNull, reason: '비회원 측정은 저장되지 않으므로 id가 없다');
+    expect(result.hr, closeTo(70, 5));
+    expect(result.conditionScore, isNotNull);
+  }, timeout: const Timeout(Duration(seconds: 90)));
 
   test('서버 주소가 https인지 확인 — 평문이면 릴리즈 APK에서 차단된다', () {
     expect(ApiConfig.baseUrl, startsWith('https://'),

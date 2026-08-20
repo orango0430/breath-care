@@ -21,7 +21,7 @@ enum MeasurementQuality {
 
 class Measurement {
   const Measurement({
-    required this.id,
+    this.id,
     required this.quality,
     required this.measuredAt,
     this.hr,
@@ -29,7 +29,15 @@ class Measurement {
     this.conditionScore,
   });
 
-  final int id;
+  /// Null for a guest reading.
+  ///
+  /// `/api/measurements/analyze` answers without an id because it analyses and
+  /// throws the reading away — there is nothing to reference later. This was
+  /// `int` and parsed with `json['id'] as int`, so every successful guest
+  /// measurement threw a type error the moment the response came back. The
+  /// throw was not an ApiException, so the retake handler never saw it and the
+  /// screen sat on "분석 중" forever: the server said 200 and the app hung.
+  final int? id;
 
   /// Beats per minute.
   final double? hr;
@@ -46,7 +54,7 @@ class Measurement {
   final DateTime measuredAt;
 
   factory Measurement.fromJson(Map<String, dynamic> json) => Measurement(
-        id: json['id'] as int,
+        id: (json['id'] as num?)?.toInt(),
         hr: (json['hr'] as num?)?.toDouble(),
         hrv: (json['hrv'] as num?)?.toDouble(),
         conditionScore: (json['conditionScore'] as num?)?.toDouble(),

@@ -109,11 +109,20 @@ class _BreathingCompletionScreenState extends State<BreathingCompletionScreen> {
     // they did breathe, we just do not know what it did for them.
     if (measurement == null || !mounted) return;
 
+    // A guest reading carries no id: the server analysed it without storing
+    // it, so there is nothing a session can point at.
+    final postId = measurement.id;
+    if (postId == null) {
+      setState(() => _isSaved = true);
+      _toast('이번 Ritual을 마쳤어요.');
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
       final session = await SessionService.instance.complete(
         sessionId: sessionId,
-        postMeasurementId: measurement.id,
+        postMeasurementId: postId,
       );
       if (!mounted) return;
       setState(() {

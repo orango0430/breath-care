@@ -336,6 +336,15 @@ class _ConditionMeasurementScreenState
       // The capture numbers ride along with the message. Without them a
       // rejection is unactionable on a phone — see [captureSummary].
       _showRetakePrompt('${e.message}\n${_ppgService.captureSummary}');
+    } catch (e) {
+      // Anything else — a response we could not parse, a bug in this file —
+      // must still land the user somewhere they can act. Without this the
+      // screen kept saying "분석 중" for ever while the server had already
+      // answered 200, because a type error walked straight past the catch
+      // above and left the status where it was.
+      if (!mounted) return;
+      debugPrint('Measurement failed unexpectedly: $e');
+      _showRetakePrompt('측정 결과를 읽지 못했어요. 다시 시도해 주세요.\n$e');
     }
   }
 
