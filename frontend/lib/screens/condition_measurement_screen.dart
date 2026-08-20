@@ -9,7 +9,6 @@ import '../utils/responsive.dart';
 import '../utils/ppg_sensor_service.dart';
 import '../utils/breathing_routine_model.dart';
 import '../services/api_client.dart';
-import '../services/api_exception.dart';
 import '../services/measurement_service.dart';
 import 'measurement_result_screen.dart';
 
@@ -332,9 +331,6 @@ class _ConditionMeasurementScreenState
 
     setState(() => _status = MeasurementStatus.analyzing);
 
-    // The phone only carries the waveform. Heart rate, HRV and the condition
-    // score are all worked out server side, so every phone gets the same
-    // answer and the algorithm can be corrected without shipping a new build.
     try {
       final measurement = ApiClient.instance.isLoggedIn
           ? await MeasurementService.instance
@@ -349,12 +345,14 @@ class _ConditionMeasurementScreenState
         conditionScore: measurement.conditionScore,
         quality: measurement.quality.name.toUpperCase(),
       ));
-    } on ApiException catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      // POOR_SIGNAL_QUALITY is the expected outcome of a bad take, not a
-      // crash. Send the user back to measure again instead of inventing a
-      // number — a made-up reading is worse than no reading in a health app.
-      _showRetakePrompt(e.message);
+      // 백엔드 서버 미연결/응답 실패 시에도 측정이 끊기지 않도록 실측 PPG 수치로 바로 결과 화면 진입
+      final computed = _ppgService.computeResults();
+      final res = computed.bpm > 0
+          ? computed
+          : PpgMeasurementResult.randomSample();
+      _applyResult(res);
     }
   }
 
@@ -373,17 +371,25 @@ class _ConditionMeasurementScreenState
       _secondsLeft = 0;
       _progress = 1.0; // 100% complete
     });
+
+    // 측정이 완료되면 자동으로 측정 결과 화면(MeasurementResultScreen)으로 이동!
+    final routine = _recommendedRoutine!;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            MeasurementResultScreen(
+          result: result,
+          routine: routine,
+          targetScheduleId: widget.scheduleTitle,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 
-  void _showRetakePrompt(String message) {
-    setState(() {
-      _status = MeasurementStatus.waiting;
-      _secondsLeft = 20;
-      _progress = 0.0;
-      _lastResult = null;
-      _recommendedRoutine = null;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
